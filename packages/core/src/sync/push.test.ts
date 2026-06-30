@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { MetaobjectDefinitionInput } from "../definition-input";
 import { defineMetaobject } from "../define";
 import { m } from "../fields/index";
 import { CREATE_DEFINITION_MUTATION, UPDATE_DEFINITION_MUTATION, type AdminGraphQLClient } from "./client";
 import type { DiffOp } from "./diff";
 import { normalizeLocal } from "./normalize";
 import type { PulledRemote } from "./pull";
-import { push } from "./push";
+import { push, referenceEdges } from "./push";
 
 type UserError = { field?: string[]; message: string; code?: string };
 interface Call {
@@ -189,5 +190,108 @@ describe("push — op application", () => {
     const { client } = recordingClient({ throwOnCall: true });
     const plan: DiffOp[] = [{ kind: "createDefinition", type: "$app:author", definition: normalizeLocal(Author) }];
     await expect(push(client, plan, { definitions: [authorDef], remote: [] })).rejects.toThrow("network down");
+  });
+});
+
+const AuthorRef = defineMetaobject("author", { name: "Author", fields: { name: m.text({ required: true }) } });
+const BookRef = defineMetaobject("book", {
+  name: "Book",
+  fields: { title: m.text({ required: true }), author: m.ref(AuthorRef) },
+});
+
+function createdTypes(calls: Call[]): string[] {
+  return calls.map((c) => (c.variables?.definition as MetaobjectDefinitionInput).type);
+}
+
+describe("push — ordering and dependency gating", () => {
+  it("creates a referenced type before its referencer regardless of plan order", async () => {
+    const { client, calls } = recordingClient();
+    // Plan lists Book (the referencer) first; topo sort must create Author first.
+    const plan: DiffOp[] = [
+      { kind: "createDefinition", type: "$app:book", definition: normalizeLocal(BookRef) },
+      { kind: "createDefinition", type: "$app:author", definition: normalizeLocal(AuthorRef) },
+    ];
+    const result = await push(client, plan, {
+      definitions: [AuthorRef.toDefinitionInput(), BookRef.toDefinitionInput()],
+      remote: [],
+    });
+
+    expect(createdTypes(calls)).toEqual(["$app:author", "$app:book"]);
+    expect(result.counts.applied).toBe(2);
+    expect(result.ok).toBe(true);
+  });
+
+  it("blocks a create whose dependency failed instead of attempting it", async () => {
+    const { client, calls } = recordingClient({ createUserErrors: [{ message: "Author rejected" }] });
+    const plan: DiffOp[] = [
+      { kind: "createDefinition", type: "$app:author", definition: normalizeLocal(AuthorRef) },
+      { kind: "createDefinition", type: "$app:book", definition: normalizeLocal(BookRef) },
+    ];
+    const result = await push(client, plan, {
+      definitions: [AuthorRef.toDefinitionInput(), BookRef.toDefinitionInput()],
+      remote: [],
+    });
+
+    const author = result.results.find((r) => r.op.type === "$app:author");
+    const book = result.results.find((r) => r.op.type === "$app:book");
+    expect(author?.status).toBe("failed");
+    expect(book?.status).toBe("blocked");
+    if (book?.status === "blocked") expect(book.reason).toContain("$app:author");
+    // Book's create was never attempted (only Author's failing call happened).
+    expect(createdTypes(calls)).toEqual(["$app:author"]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("blocks both members of a reference cycle and attempts neither", async () => {
+    // Plain type-refs build the cycle without circular schema type-inference;
+    // referenceEdges only reads the metaobject_definition_type validation value.
+    const A = defineMetaobject("a", { name: "A", fields: { b: m.ref({ type: "$app:b" }) } });
+    const B = defineMetaobject("b", { name: "B", fields: { a: m.ref({ type: "$app:a" }) } });
+    const { client, calls } = recordingClient();
+    const plan: DiffOp[] = [
+      { kind: "createDefinition", type: "$app:a", definition: normalizeLocal(A) },
+      { kind: "createDefinition", type: "$app:b", definition: normalizeLocal(B) },
+    ];
+    const result = await push(client, plan, { definitions: [A.toDefinitionInput(), B.toDefinitionInput()], remote: [] });
+
+    expect(calls).toEqual([]);
+    expect(result.results.map((r) => r.status)).toEqual(["blocked", "blocked"]);
+    for (const r of result.results) if (r.status === "blocked") expect(r.reason).toContain("cycle");
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("referenceEdges", () => {
+  it("collects single metaobject_definition_type targets", () => {
+    const def: MetaobjectDefinitionInput = {
+      type: "$app:book",
+      name: "Book",
+      fieldDefinitions: [
+        { key: "author", name: "Author", required: false, type: "metaobject_reference", validations: [{ name: "metaobject_definition_type", value: "$app:author" }] },
+      ],
+    };
+    expect(referenceEdges(def)).toEqual(["$app:author"]);
+  });
+
+  it("collects list metaobject_definition_types targets from a JSON array", () => {
+    const def: MetaobjectDefinitionInput = {
+      type: "$app:shelf",
+      name: "Shelf",
+      fieldDefinitions: [
+        { key: "books", name: "Books", required: false, type: "list.metaobject_reference", validations: [{ name: "metaobject_definition_types", value: JSON.stringify(["$app:book", "$app:author"]) }] },
+      ],
+    };
+    expect(referenceEdges(def)).toEqual(["$app:book", "$app:author"]);
+  });
+
+  it("ignores a malformed metaobject_definition_types value", () => {
+    const def: MetaobjectDefinitionInput = {
+      type: "$app:x",
+      name: "X",
+      fieldDefinitions: [
+        { key: "y", name: "Y", required: false, type: "list.metaobject_reference", validations: [{ name: "metaobject_definition_types", value: "not json" }] },
+      ],
+    };
+    expect(referenceEdges(def)).toEqual([]);
   });
 });
