@@ -60,6 +60,18 @@ export abstract class Field<TOut, TIn = TOut, Req extends boolean = false> {
     return this.wireIsJson ? JSON.stringify(json) : String(json);
   }
 
+  /** Element-level JSON form (for embedding inside list values). */
+  elementToJson(value: TIn): unknown {
+    return this.toJson(value);
+  }
+  /** Element-level decode from a JSON form (coerce + check), for list elements. */
+  elementFromJson(json: unknown): DecodeResult<TOut> {
+    const coerced = this.fromJson(json);
+    if (coerced.issues) return coerced;
+    const issues = this.check(coerced.value);
+    return issues.length ? { issues } : { value: coerced.value };
+  }
+
   get ["~standard"](): StandardSchemaV1.Props<TIn, TOut> {
     return {
       version: 1,
