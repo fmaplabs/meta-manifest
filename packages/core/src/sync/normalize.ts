@@ -28,13 +28,13 @@ export function normalizeLocal<F extends FieldMap>(schema: MetaobjectSchema<F>):
   };
 }
 
-interface PulledFieldDefinition {
+export interface PulledFieldDefinition {
   key: string;
   type: { name: string } | string;
   required: boolean;
   validations?: FieldValidation[];
 }
-interface PulledDefinition {
+export interface PulledDefinition {
   type: string;
   name?: string;
   fieldDefinitions: PulledFieldDefinition[];
