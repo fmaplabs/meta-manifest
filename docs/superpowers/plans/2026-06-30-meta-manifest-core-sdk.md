@@ -1568,7 +1568,7 @@ git commit -m "feat(core): assemble the m namespace barrel" -m "Claude-Session: 
   - `type FieldMap = Record<string, Field<any, any, any>>`
   - `type Infer<S>` / `type InferInput<S>` — output/input object types with required-key handling.
   - `type AccessConfig`, `type CapabilitiesConfig`, `type MetaobjectConfig<F>`.
-  - `defineMetaobject<F extends FieldMap>(handle: string, config: MetaobjectConfig<F>): MetaobjectSchema<F>` where `MetaobjectSchema<F>` has `handle`, `type` (`"$app:"+handle`), `config`, `fields`, `parse(input)`, `encode(value)`, and `["~standard"]`. (`toDefinitionInput()` is added in Task 12.)
+  - `defineMetaobject<F extends Record<string, unknown>>(handle: string, config: MetaobjectConfig<F>): F extends FieldMap ? MetaobjectSchema<F> : never` (the loose constraint is required for correct `Req` inference — see the inference note below the code). `MetaobjectSchema<F extends FieldMap>` has `handle`, `type` (`"$app:"+handle`), `config`, `fields`, `parse(input)`, `encode(value)`, and `["~standard"]`. (`toDefinitionInput()` is added in Task 12.)
   - `parse` input: `Array<{ key: string; jsonValue?: unknown; value?: unknown }>` or `Record<string, unknown>`.
 
 - [ ] **Step 1: Write `packages/core/src/infer.ts`**
@@ -1670,7 +1670,7 @@ export interface CapabilitiesConfig {
   translatable?: boolean;
   renderable?: boolean;
 }
-export interface MetaobjectConfig<F extends FieldMap> {
+export interface MetaobjectConfig<F> {
   name: string;
   description?: string;
   displayName?: keyof F & string;
@@ -1703,12 +1703,18 @@ function toValueMap(input: ParseInput): Map<string, unknown> {
   return map;
 }
 
-export function defineMetaobject<F extends FieldMap>(
+// F is constrained only to `Record<string, unknown>` rather than `FieldMap`. A
+// `Field<...>` constraint would supply a contextual type whose `Req` slot is
+// `any`, which pollutes the `R` inference of inline builder calls
+// (`m.text({ required: true })`) at the call site and breaks required-vs-optional
+// key detection. The loose constraint avoids that; field-map-ness is enforced via
+// the conditional return type instead (`never` when `fields` isn't a field map).
+export function defineMetaobject<F extends Record<string, unknown>>(
   handle: string,
   config: MetaobjectConfig<F>,
-): MetaobjectSchema<F> {
+): F extends FieldMap ? MetaobjectSchema<F> : never {
   const type = `$app:${handle}`;
-  const entries = Object.entries(config.fields) as Array<[string, Field<any, any, any>]>;
+  const entries = Object.entries(config.fields as FieldMap) as Array<[string, Field<any, any, any>]>;
 
   function parse(input: ParseInput) {
     const values = toValueMap(input);
@@ -1723,20 +1729,20 @@ export function defineMetaobject<F extends FieldMap>(
       if (r.issues) issues.push(...r.issues.map((i) => ({ ...i, path: [key, ...(i.path ?? [])] })));
       else out[key] = r.value;
     }
-    return issues.length ? { issues } : { value: out as Infer<F> };
+    return issues.length ? { issues } : { value: out };
   }
 
-  function encode(value: InferInput<F>) {
+  function encode(value: Record<string, unknown>) {
     const result: Array<{ key: string; value: string }> = [];
     for (const [key, field] of entries) {
-      const v = (value as Record<string, unknown>)[key];
+      const v = value[key];
       if (v === undefined) continue;
       result.push({ key, value: field.encode(v) });
     }
     return result;
   }
 
-  return {
+  const schemaRef = {
     handle,
     type,
     config,
@@ -1744,13 +1750,16 @@ export function defineMetaobject<F extends FieldMap>(
     parse,
     encode,
     ["~standard"]: {
-      version: 1,
+      version: 1 as const,
       vendor: "meta-manifest",
       validate: (input: unknown) => parse(input as ParseInput),
     },
   };
+  return schemaRef as unknown as F extends FieldMap ? MetaobjectSchema<F> : never;
 }
 ```
+
+> **Inference note (load-bearing):** the loose `F extends Record<string, unknown>` constraint + conditional return type is required, not stylistic. A `Field`-mentioning constraint poisons the per-field `Req` inference of inline `m.*({ required: true })` calls (collapsing `Req` to `any`/`boolean`), which silently breaks required-vs-optional key detection in `Infer`. Verified: required inference, the `displayName` key-constraint, and rejection of non-field values all hold with this signature. `schemaRef` is a loosely-typed literal cast to the precise schema type at `return`; `parse`/`encode` are loosely typed internally and the external `MetaobjectSchema<F>` type supplies the precise `Infer`/`InferInput` surface.
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -1904,30 +1913,30 @@ Add the method to the `MetaobjectSchema` interface (after `encode`):
   toDefinitionInput(): MetaobjectDefinitionInput;
 ```
 
-In the returned object inside `defineMetaobject`, add (after `encode,`):
+`define.ts` already builds a `const schemaRef = {...}` literal (loosely typed) and returns it via a cast. Add ONE line to that existing `schemaRef` literal (after `encode,`). The standalone `toDefinitionInput` only reads `type`/`config`/`fields`, so cast `schemaRef` to `MetaobjectSchema<FieldMap>` when passing it (`FieldMap` is already imported in `define.ts` from `./infer`):
 
 ```ts
-    toDefinitionInput: () => toDefinitionInput(schemaRef),
+    toDefinitionInput: () => toDefinitionInput(schemaRef as unknown as MetaobjectSchema<FieldMap>),
 ```
 
-To give the closure a reference to the finished schema, change the return to assign first:
+So the existing `schemaRef` literal becomes (the `return schemaRef as unknown as ...` line is UNCHANGED from Task 11 — do not alter it):
 
 ```ts
-  const schemaRef: MetaobjectSchema<F> = {
+  const schemaRef = {
     handle,
     type,
     config,
     fields: config.fields,
     parse,
     encode,
-    toDefinitionInput: () => toDefinitionInput(schemaRef),
+    toDefinitionInput: () => toDefinitionInput(schemaRef as unknown as MetaobjectSchema<FieldMap>),
     ["~standard"]: {
-      version: 1,
+      version: 1 as const,
       vendor: "meta-manifest",
       validate: (input: unknown) => parse(input as ParseInput),
     },
   };
-  return schemaRef;
+  return schemaRef as unknown as F extends FieldMap ? MetaobjectSchema<F> : never;
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -2329,5 +2338,5 @@ git commit -m "feat(core): finalize public barrel and add README" -m "Claude-Ses
 ## Notes for the implementer
 
 - **`exactOptionalPropertyTypes` is off** (tsconfig) so assigning `undefined`-able optionals (e.g. `def.description = …` only when present, but `name?: string` from `def.name`) stays simple. Keep it off.
-- If `expectTypeOf(...).toEqualTypeOf(...)` in Task 11 is too strict against the `Simplify` wrapper, fall back to `.toMatchTypeOf(...)`; the runtime assertions are the real gate.
+- Task 11 inference: with the corrected loose-constraint `defineMetaobject` signature (see Task 11's inference note), the exact `expectTypeOf(...).toEqualTypeOf(...)` assertion passes as written — no relaxation needed. The earlier draft used a `Field`-mentioning constraint that poisoned `Req` inference of inline builder calls; that is fixed. The runtime assertions remain the real gate.
 - The two **§14 open questions that need a live store** (does `metaobject_definition_type` accept a not-yet-created target; exact stored `rating` JSON) are intentionally deferred — they only matter once the networked push/pull phase lands, and do not block this no-network core.
