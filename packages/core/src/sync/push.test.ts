@@ -1,0 +1,193 @@
+import { describe, expect, it } from "vitest";
+import { defineMetaobject } from "../define";
+import { m } from "../fields/index";
+import { CREATE_DEFINITION_MUTATION, UPDATE_DEFINITION_MUTATION, type AdminGraphQLClient } from "./client";
+import type { DiffOp } from "./diff";
+import { normalizeLocal } from "./normalize";
+import type { PulledRemote } from "./pull";
+import { push } from "./push";
+
+type UserError = { field?: string[]; message: string; code?: string };
+interface Call {
+  query: string;
+  variables: Record<string, unknown> | undefined;
+}
+interface FakeConfig {
+  createId?: string;
+  createUserErrors?: UserError[];
+  updateUserErrors?: UserError[];
+  throwOnCall?: boolean;
+}
+
+function recordingClient(config: FakeConfig = {}) {
+  const calls: Call[] = [];
+  const client: AdminGraphQLClient = async (query, options) => {
+    calls.push({ query, variables: options?.variables });
+    if (config.throwOnCall) throw new Error("network down");
+    if (query === CREATE_DEFINITION_MUTATION) {
+      return {
+        data: {
+          metaobjectDefinitionCreate: {
+            metaobjectDefinition: { id: config.createId ?? "gid://shopify/MetaobjectDefinition/created", type: "app--999--x" },
+            userErrors: config.createUserErrors ?? [],
+          },
+        },
+      };
+    }
+    if (query === UPDATE_DEFINITION_MUTATION) {
+      return {
+        data: {
+          metaobjectDefinitionUpdate: {
+            metaobjectDefinition: { id: options?.variables?.id as string, type: "app--999--x" },
+            userErrors: config.updateUserErrors ?? [],
+          },
+        },
+      };
+    }
+    return { data: {} };
+  };
+  return { client, calls };
+}
+
+const Author = defineMetaobject("author", {
+  name: "Author",
+  fields: { name: m.text({ required: true, max: 120 }), bio: m.multilineText() },
+});
+const authorDef = Author.toDefinitionInput();
+const authorRemote: PulledRemote = {
+  id: "gid://shopify/MetaobjectDefinition/author-1",
+  type: "$app:author",
+  definition: { type: "$app:author", name: "Author", fieldDefinitions: [] },
+};
+
+describe("push — op application", () => {
+  it("createDefinition sends the full definition input and reports applied", async () => {
+    const { client, calls } = recordingClient({ createId: "gid://shopify/MetaobjectDefinition/new-author" });
+    const plan: DiffOp[] = [{ kind: "createDefinition", type: "$app:author", definition: normalizeLocal(Author) }];
+    const result = await push(client, plan, { definitions: [authorDef], remote: [] });
+
+    expect(calls).toEqual([{ query: CREATE_DEFINITION_MUTATION, variables: { definition: authorDef } }]);
+    expect(result.results).toEqual([{ op: plan[0], status: "applied", id: "gid://shopify/MetaobjectDefinition/new-author" }]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("addField updates the definition with the full create field input", async () => {
+    const { client, calls } = recordingClient();
+    const bio = normalizeLocal(Author).fields[1]!;
+    const plan: DiffOp[] = [{ kind: "addField", type: "$app:author", field: bio }];
+    const result = await push(client, plan, { definitions: [authorDef], remote: [authorRemote] });
+
+    expect(calls).toEqual([
+      {
+        query: UPDATE_DEFINITION_MUTATION,
+        variables: {
+          id: "gid://shopify/MetaobjectDefinition/author-1",
+          definition: { fieldDefinitions: [{ create: { key: "bio", name: "bio", required: false, type: "multi_line_text_field", validations: [] } }] },
+        },
+      },
+    ]);
+    expect(result.results).toEqual([{ op: plan[0], status: "applied", id: "gid://shopify/MetaobjectDefinition/author-1" }]);
+  });
+
+  it("updateField sends the full field input (sourced from definitions, not op.changes) without the immutable type", async () => {
+    const { client, calls } = recordingClient();
+    // op.changes says required:false, but the local definition says required:true —
+    // push must send the definition's truth, not the lossy plan delta. [design §7]
+    const plan: DiffOp[] = [{ kind: "updateField", type: "$app:author", key: "name", changes: { required: false } }];
+    await push(client, plan, { definitions: [authorDef], remote: [authorRemote] });
+
+    expect(calls).toEqual([
+      {
+        query: UPDATE_DEFINITION_MUTATION,
+        variables: {
+          id: "gid://shopify/MetaobjectDefinition/author-1",
+          definition: { fieldDefinitions: [{ update: { key: "name", name: "name", required: true, validations: [{ name: "max", value: "120" }] } }] },
+        },
+      },
+    ]);
+  });
+
+  it("removeField is skipped by default and deletes the field under allowDestructive", async () => {
+    const plan: DiffOp[] = [{ kind: "removeField", type: "$app:author", key: "legacy", destructive: true }];
+
+    const safe = recordingClient();
+    const safeResult = await push(safe.client, plan, { definitions: [authorDef], remote: [authorRemote] });
+    expect(safe.calls).toEqual([]);
+    expect(safeResult.results).toEqual([{ op: plan[0], status: "skipped", reason: "destructive" }]);
+
+    const forced = recordingClient();
+    const forcedResult = await push(forced.client, plan, { definitions: [authorDef], remote: [authorRemote] }, { allowDestructive: true });
+    expect(forced.calls).toEqual([
+      {
+        query: UPDATE_DEFINITION_MUTATION,
+        variables: {
+          id: "gid://shopify/MetaobjectDefinition/author-1",
+          definition: { fieldDefinitions: [{ delete: { key: "legacy" } }] },
+        },
+      },
+    ]);
+    expect(forcedResult.results).toEqual([{ op: plan[0], status: "applied", id: "gid://shopify/MetaobjectDefinition/author-1" }]);
+  });
+
+  it("changeFieldType deletes then re-creates the field under allowDestructive", async () => {
+    const { client, calls } = recordingClient();
+    const plan: DiffOp[] = [{ kind: "changeFieldType", type: "$app:author", key: "name", from: "number_integer", to: "single_line_text_field", destructive: true }];
+    await push(client, plan, { definitions: [authorDef], remote: [authorRemote] }, { allowDestructive: true });
+
+    expect(calls).toEqual([
+      {
+        query: UPDATE_DEFINITION_MUTATION,
+        variables: {
+          id: "gid://shopify/MetaobjectDefinition/author-1",
+          definition: {
+            fieldDefinitions: [
+              { delete: { key: "name" } },
+              { create: { key: "name", name: "name", required: true, type: "single_line_text_field", validations: [{ name: "max", value: "120" }] } },
+            ],
+          },
+        },
+      },
+    ]);
+  });
+
+  it("reports userErrors as failed without throwing", async () => {
+    const userErrors: UserError[] = [{ field: ["definition", "type"], message: "Type already taken", code: "TAKEN" }];
+    const { client } = recordingClient({ createUserErrors: userErrors });
+    const plan: DiffOp[] = [{ kind: "createDefinition", type: "$app:author", definition: normalizeLocal(Author) }];
+    const result = await push(client, plan, { definitions: [authorDef], remote: [] });
+
+    expect(result.results).toEqual([{ op: plan[0], status: "failed", userErrors }]);
+    expect(result.counts.failed).toBe(1);
+    expect(result.ok).toBe(false);
+  });
+
+  it("blocks a field op whose type has no known GID and is not created this run", async () => {
+    const { client, calls } = recordingClient();
+    const ghost = normalizeLocal(Author).fields[0]!;
+    const plan: DiffOp[] = [{ kind: "addField", type: "$app:ghost", field: ghost }];
+    const result = await push(client, plan, { definitions: [authorDef], remote: [] });
+
+    expect(calls).toEqual([]);
+    expect(result.results[0]?.status).toBe("blocked");
+    expect(result.ok).toBe(false);
+  });
+
+  it("aggregates counts and ok across a mixed plan", async () => {
+    const { client } = recordingClient();
+    const bio = normalizeLocal(Author).fields[1]!;
+    const plan: DiffOp[] = [
+      { kind: "addField", type: "$app:author", field: bio },
+      { kind: "removeField", type: "$app:author", key: "legacy", destructive: true },
+    ];
+    const result = await push(client, plan, { definitions: [authorDef], remote: [authorRemote] });
+
+    expect(result.counts).toEqual({ applied: 1, skipped: 1, blocked: 0, failed: 0 });
+    expect(result.ok).toBe(true);
+  });
+
+  it("propagates a transport throw", async () => {
+    const { client } = recordingClient({ throwOnCall: true });
+    const plan: DiffOp[] = [{ kind: "createDefinition", type: "$app:author", definition: normalizeLocal(Author) }];
+    await expect(push(client, plan, { definitions: [authorDef], remote: [] })).rejects.toThrow("network down");
+  });
+});
