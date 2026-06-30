@@ -1,6 +1,7 @@
 import type { Field, Issue } from "./fields/base";
 import { type FieldMap, type Infer, type InferInput } from "./infer";
 import type { StandardSchemaV1 } from "./standard-schema";
+import { toDefinitionInput, type MetaobjectDefinitionInput } from "./definition-input";
 
 export type { Infer, InferInput } from "./infer";
 
@@ -33,6 +34,7 @@ export interface MetaobjectSchema<F extends FieldMap> {
   readonly fields: F;
   parse(input: ParseInput): { value: Infer<F>; issues?: undefined } | { value?: undefined; issues: Issue[] };
   encode(value: InferInput<F>): Array<{ key: string; value: string }>;
+  toDefinitionInput(): MetaobjectDefinitionInput;
   readonly ["~standard"]: StandardSchemaV1.Props<InferInput<F>, Infer<F>>;
 }
 
@@ -92,6 +94,7 @@ export function defineMetaobject<F extends Record<string, unknown>>(
     fields: config.fields,
     parse,
     encode,
+    toDefinitionInput: () => toDefinitionInput(schemaRef as unknown as MetaobjectSchema<FieldMap>),
     ["~standard"]: {
       version: 1 as const,
       vendor: "meta-manifest",
