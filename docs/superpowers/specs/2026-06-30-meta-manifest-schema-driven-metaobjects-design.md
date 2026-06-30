@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-30
 **Status:** Proposed (awaiting review)
-**Scope of this spec:** the schema/SDK core. Networked push/pull and the dashboard UI are designed here at a high level but deferred to follow-on specs.
+**Scope of this spec:** the schema/SDK core. Networked push/pull and the dashboard UI are designed here at a high level
+but deferred to follow-on specs.
 
 ## 1. Context & goals
 
@@ -16,26 +17,38 @@ The product is **SDK-first**: a code-first TypeScript library (`@meta-manifest/c
 
 ## 2. Decisions (locked)
 
-| # | Decision | Choice |
-|---|----------|--------|
-| 1 | Core shape | TypeScript SDK, code-first fluent builder. Embedded app is a dashboard. |
-| 2 | Engine & deps | Purpose-built, zero runtime dependency. Implements the **Standard Schema** (`~standard`) interface. Lossless typed-JS ⟷ Shopify-wire parse/serialize in both directions. |
-| 3 | Ownership | App-owned (`$app:`) types for v1; the `type` identifier is kept abstract so merchant-owned / general management can be layered on later without reworking the syntax. |
-| 4 | First build | **Core SDK + unit tests, no network.** Field builders + codecs, `defineMetaobject`, inference, Standard Schema, `toDefinitionInput()`, and a pure `diff()`. Live push/pull adapter + dashboard are the next phase. |
+| #   | Decision      | Choice
+|
+| --- | ------------- |
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|
+| 1   | Core shape    | TypeScript SDK, code-first fluent builder. Embedded app is a dashboard.                                                                                                                                            |
+| 2   | Engine & deps | Purpose-built, zero runtime dependency. Implements the **Standard Schema** (`~standard`) interface. Lossless typed-JS ⟷ Shopify-wire parse/serialize in both directions.                                           |
+| 3   | Ownership     | App-owned (`$app:`) types for v1; the `type` identifier is kept abstract so merchant-owned / general management can be layered on later without reworking the syntax.                                              |
+| 4   | First build   | **Core SDK + unit tests, no network.** Field builders + codecs, `defineMetaobject`, inference,
+Standard Schema, `toDefinitionInput()`, and a pure `diff()`. Live push/pull adapter + dashboard are the next phase. |
 
 ## 3. Verified Shopify ground truth
 
 These were confirmed against shopify.dev docs (not memory) and drive the design. Record them so the implementation plan does not re-derive.
 
-- **App-owned types CAN be created at runtime.** `metaobjectDefinitionCreate` accepts `type: "$app:author"` (stored/resolved as `app--<appId>--author`). So app-owned + runtime push is coherent.
-- **Runtime lane vs TOML lane do not mix.** Definitions declared in `shopify.app.toml` are **read-only through the Admin API** (mutations error). meta-manifest manages definitions exclusively through GraphQL mutations, so its managed types must **not** also be TOML-declared. (The template's existing `[metaobjects.app.example]` TOML block is the read-only lane and is unrelated to meta-manifest-managed types.)
+- **App-owned types CAN be created at runtime.** `metaobjectDefinitionCreate` accepts `type: "$app:author"`
+(stored/resolved as `app--<appId>--author`). So app-owned + runtime push is coherent.
+- **Runtime lane vs TOML lane do not mix.** Definitions declared in `shopify.app.toml` are **read-only through the Admin
+API** (mutations error). meta-manifest manages definitions exclusively through GraphQL mutations, so its managed types
+must **not** also be TOML-declared. (The template's existing `[metaobjects.app.example]` TOML block is the read-only
+lane and is unrelated to meta-manifest-managed types.)
 - **Values are always strings.** Read/write through the Admin API stores every field value as a string or JSON-string regardless of type. Reading complex types back, prefer `jsonValue` (parsed JSON scalar; available since API 2024-07).
 - **Definition input shapes.**
   - `MetaobjectDefinitionCreateInput`: `type` (required, 3–255 chars, alphanumeric/hyphen/underscore; `$app:` prefix allowed), `name`, `description`, `displayNameKey`, `access` (`{ admin, storefront }`), `capabilities`, `fieldDefinitions[]`.
   - `MetaobjectFieldDefinitionCreateInput`: `key` (required, 2–64 chars), `name`, `description`, `required` (default false), `type` (required), `validations: [{ name, value }]`.
   - `type` cannot be changed after creation.
-- **References are pinned via `validations`.** `metaobject_reference` supports either `metaobject_definition_id` (a GID) **or** `metaobject_definition_type` (a type string, e.g. `$app:author`). Pinning **by type** makes push order-independent for acyclic schemas. Lists/mixed use the plural `…_ids` / `…_types`.
-- **Type-change safety.** Most field types report `supportsDefinitionMigrations: false`, so changing a field's type is destructive. A `metafieldDefinitionTypes` introspection query returns the authoritative type list, supported validations, and the migration flag at runtime.
+- **References are pinned via `validations`.** `metaobject_reference` supports either `metaobject_definition_id` (a GID)
+**or** `metaobject_definition_type` (a type string, e.g. `$app:author`). Pinning **by type** makes push
+order-independent for acyclic schemas. Lists/mixed use the plural `…_ids` / `…_types`.
+- **Type-change safety.** Most field types report `supportsDefinitionMigrations: false`, so changing a field's type is
+destructive. A `metafieldDefinitionTypes` introspection query returns the authoritative type list, supported
+validations, and the migration flag at runtime.
 - **App-scoped limits (for awareness):** 32 metaobject definitions, 64 fields per definition.
 
 ## 4. Architecture
@@ -56,16 +69,16 @@ import { defineMetaobject, m } from "@meta-manifest/core";
 
 export const Author = defineMetaobject("author", {
   name: "Author",
-  displayName: "name",                       // → displayNameKey
+  displayName: "name", // → displayNameKey
   access: { storefront: "public_read" },
   capabilities: { publishable: true },
   fields: {
-    name:    m.text({ name: "Author Name", required: true, max: 120 }),
-    bio:     m.multilineText({ name: "Bio" }),
-    avatar:  m.file({ name: "Avatar", accept: ["Image"] }),
-    rating:  m.rating({ min: 1, max: 5 }),
+    name: m.text({ name: "Author Name", required: true, max: 120 }),
+    bio: m.multilineText({ name: "Bio" }),
+    avatar: m.file({ name: "Avatar", accept: ["Image"] }),
+    rating: m.rating({ min: 1, max: 5 }),
     website: m.url(),
-    tags:    m.list(m.text({ choices: ["new", "featured", "classic"] })),
+    tags: m.list(m.text({ choices: ["new", "featured", "classic"] })),
   },
 });
 ```
@@ -79,11 +92,11 @@ export const Book = defineMetaobject("book", {
   name: "Book",
   displayName: "title",
   fields: {
-    title:       m.text({ required: true }),
-    price:       m.money(),
+    title: m.text({ required: true }),
+    price: m.money(),
     publishedOn: m.date(),
-    author:      m.ref(Author),          // metaobject_reference, pinned by type "$app:author"
-    related:     m.list(m.ref(Author)),  // list.metaobject_reference
+    author: m.ref(Author), // metaobject_reference, pinned by type "$app:author"
+    related: m.list(m.ref(Author)), // list.metaobject_reference
   },
 });
 ```
@@ -94,11 +107,11 @@ type AuthorValue = Infer<typeof Author>;
 //   rating?: { value: number; min: number; max: number };
 //   website?: string; tags?: string[] }
 
-Author.type;                         // "$app:author" (resolved app-owned identifier)
-Author.toDefinitionInput();          // → MetaobjectDefinitionCreateInput (for push)
-Author.parse(metaobjectFields);      // Shopify {key, jsonValue}[] OR {key: value} record → typed, validated (read/pull)
-Author.encode({ name: "Ursula" });   // typed object → [{ key, value }] for metaobjectUpsert (write)
-Author["~standard"];                 // Standard Schema v1 interface for the typed object
+Author.type; // "$app:author" (resolved app-owned identifier)
+Author.toDefinitionInput(); // → MetaobjectDefinitionCreateInput (for push)
+Author.parse(metaobjectFields); // Shopify {key, jsonValue}[] OR {key: value} record → typed, validated (read/pull)
+Author.encode({ name: "Ursula" }); // typed object → [{ key, value }] for metaobjectUpsert (write)
+Author["~standard"]; // Standard Schema v1 interface for the typed object
 ```
 
 ### API decisions
@@ -140,7 +153,9 @@ Exact JSON shapes for `money` / `rating` / measurement types are pinned from doc
 Returns a schema object exposing:
 
 - `.type` — resolved identifier (`$app:<handle>` for app-owned).
-- `.toDefinitionInput()` — `MetaobjectDefinitionCreateInput` (name, description, displayNameKey from `displayName`, access, capabilities, and `fieldDefinitions` built from each field's `shopifyType` + `validations()` + `required`/`name`/`description`).
+- `.toDefinitionInput()` — `MetaobjectDefinitionCreateInput` (name, description, displayNameKey from `displayName`,
+access, capabilities, and `fieldDefinitions` built from each field's `shopifyType` + `validations()` +
+`required`/`name`/`description`).
 - `.parse(fields)` — accepts `MetaobjectField[]` (`{ key, jsonValue|value }`) or a `{ key: value }` record → typed, validated object. Each field decoded by its codec; required-field and validation errors aggregated.
 - `.encode(value)` — typed object → `[{ key, value }]` for `metaobjectUpsert`.
 - `["~standard"]` — object-level Standard Schema interface.
