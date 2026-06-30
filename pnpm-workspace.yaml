@@ -1,5 +1,6 @@
 packages:
   - 'extensions/*'
+  - 'packages/*'
 allowBuilds:
   '@parcel/watcher': true
   '@prisma/client': true
