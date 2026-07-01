@@ -2,24 +2,53 @@
   "name": "@fmaplabs/meta-manifest",
   "version": "0.1.0",
   "description": "Zero-dependency, zod-style builder for Shopify metaobject definitions, plus a CLI (mm) that syncs them to a store via pull → diff → push.",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
-  "engines": { "node": ">=20.19 <22 || >=22.12" },
+  "engines": {
+    "node": ">=20.19 <22 || >=22.12"
+  },
   "author": "kyle",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/fmaplabs/meta-manifest.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fmaplabs/meta-manifest.git"
+  },
   "homepage": "https://github.com/fmaplabs/meta-manifest#readme",
   "bugs": "https://github.com/fmaplabs/meta-manifest/issues",
-  "keywords": ["shopify", "metaobject", "metaobjects", "metafields", "schema", "cli", "codegen", "admin-api"],
+  "keywords": [
+    "shopify",
+    "metaobject",
+    "metaobjects",
+    "metafields",
+    "schema",
+    "cli",
+    "codegen",
+    "admin-api"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" },
-    "./node": { "types": "./dist/node/client.d.ts", "import": "./dist/node/client.js", "require": "./dist/node/client.cjs" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./node": {
+      "types": "./dist/node/client.d.ts",
+      "import": "./dist/node/client.js",
+      "require": "./dist/node/client.cjs"
+    }
   },
-  "bin": { "meta-manifest": "./dist/cli/index.js", "mm": "./dist/cli/index.js" },
-  "files": ["dist"],
+  "bin": {
+    "meta-manifest": "./dist/cli/index.js",
+    "mm": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
