@@ -57,6 +57,48 @@ export const Book = defineMetaobject("book", {
 });
 ```
 
+### Configuration options
+
+Beyond fields, a metaobject definition accepts these options — all optional, all
+reconciled by `diff`/`push` against a live store:
+
+```ts
+export const Author = defineMetaobject("author", {
+  name: "Author",
+  displayName: "name",              // optional; omit → Shopify auto-generates
+  scope: "merchant",                // optional; overrides config.scope for this metaobject
+  access: {
+    admin: "merchant_read_write",   // "merchant_read" | "merchant_read_write" (app scope only)
+    storefront: "public_read",      // "none" | "public_read"
+    customerAccount: "read",        // "none" | "read"
+  },
+  capabilities: {
+    publishable: true,                                              // active/draft status
+    translatable: true,                                            // translations
+    renderable: { metaTitleKey: "name", metaDescriptionKey: "bio" }, // SEO metadata; also accepts `true`
+    onlineStore: { urlHandle: "authors", createRedirects: true },  // publish entries as web pages
+  },
+  fields: {
+    name: m.text({ required: true, filterable: true }),  // filterable → "use as filter" in the admin
+    bio: m.multilineText(),
+  },
+});
+```
+
+| Option | Maps to | Notes |
+| --- | --- | --- |
+| `scope` (config or per-metaobject) | app (`$app:<handle>`) vs merchant (`<handle>`) `type` | default `"app"`; resolved at sync time — `Author.type` stays `"$app:author"` |
+| `merchantEditable` (config) | `access.admin` default | `false` → `merchant_read`, `true` → `merchant_read_write` (app scope only) |
+| `access.admin` | `access.admin` | per-metaobject override; invalid on merchant scope |
+| `access.storefront` | `access.storefront` | Storefront API access |
+| `access.customerAccount` | `access.customerAccount` | Customer Account API access (`none` \| `read`) |
+| `capabilities.publishable` | `capabilities.publishable` | active/draft status |
+| `capabilities.translatable` | `capabilities.translatable` | translations |
+| `capabilities.renderable` | `capabilities.renderable` | `true` or `{ metaTitleKey?, metaDescriptionKey? }` (SEO) |
+| `capabilities.onlineStore` | `capabilities.onlineStore` | publish as web pages; GraphQL-only (not `shopify.app.toml`) |
+| `displayName` | `displayNameKey` | omit to let Shopify auto-generate |
+| field `filterable` | field `capabilities.adminFilterable` | expose the field as an admin filter |
+
 For the full `pull` → `diff` → `push` sync model (how local schema and a live store are
 reconciled, destructive-change gating, dependency ordering, error handling), see
 [`docs/SYNC.md`](./docs/SYNC.md).
@@ -79,6 +121,8 @@ export default defineConfig({
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   apiVersion: "2026-07",           // optional; defaults to DEFAULT_API_VERSION
   schema: "./src/schema.ts",       // where `pull` writes, `diff`/`push` read
+  scope: "app",                    // optional; "app" (default) | "merchant" — applies to all metaobjects
+  merchantEditable: false,         // optional; default admin access for app-scoped metaobjects
 });
 ```
 
@@ -120,4 +164,4 @@ config/transport error, and `0` otherwise — including when destructive ops wer
 
 v1 covers metaobject **definitions** (schema sync) only. A runtime client for reading/writing
 metaobject **entries** — the tento-style query API — is not implemented yet and is tracked as a
-follow-up, along with codegen of `access`/`capabilities` config.
+follow-up.

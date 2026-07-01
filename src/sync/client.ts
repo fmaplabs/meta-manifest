@@ -44,6 +44,8 @@ export const LIST_DEFINITIONS_QUERY = `query ListMetaobjectDefinitions($after: S
       id
       name
       type
+      description
+      displayNameKey
       fieldDefinitions {
         key
         name
@@ -51,6 +53,14 @@ export const LIST_DEFINITIONS_QUERY = `query ListMetaobjectDefinitions($after: S
         required
         type { name }
         validations { name value }
+        capabilities { adminFilterable { enabled } }
+      }
+      access { admin storefront customerAccount }
+      capabilities {
+        publishable { enabled }
+        translatable { enabled }
+        renderable { enabled data { metaTitleKey metaDescriptionKey } }
+        onlineStore { enabled data { urlHandle } }
       }
     }
     pageInfo { hasNextPage endCursor }
