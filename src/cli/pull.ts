@@ -6,8 +6,8 @@ import { generateSchemaSource, normalizeRemote, pullAll } from "../index";
 /** Format source with the user's local prettier if available; otherwise return as-is. */
 async function maybeFormat(source: string): Promise<string> {
   try {
-    // @ts-expect-error prettier is not a dependency; dynamic import may fail
-    const prettier: any = await import("prettier");
+    const spec = "prettier";
+    const prettier = await import(spec);
     return await prettier.format(source, { parser: "typescript" });
   } catch {
     return source;
