@@ -23,9 +23,15 @@ export { toDefinitionInput } from "./definition-input";
 export type { MetaobjectDefinitionInput, FieldDefinitionInput } from "./definition-input";
 
 export { diff } from "./sync/diff";
-export type { DiffOp } from "./sync/diff";
+export type { DiffOp, DefinitionChange } from "./sync/diff";
 export { normalizeLocal, normalizeDefinition, normalizeRemote } from "./sync/normalize";
-export type { RemoteDefinition, RemoteField } from "./sync/normalize";
+export type {
+  RemoteDefinition,
+  RemoteField,
+  RemoteAccess,
+  RemoteCapabilities,
+  PulledDefinition,
+} from "./sync/normalize";
 export { resolveDefinitions } from "./sync/resolve";
 export type { ScopeConfig, Scope } from "./sync/resolve";
 

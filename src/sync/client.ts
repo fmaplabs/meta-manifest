@@ -26,12 +26,14 @@ export const PULL_DEFINITION_QUERY = `query PullMetaobjectDefinition($type: Stri
       required
       type { name }
       validations { name value }
+      capabilities { adminFilterable { enabled } }
     }
-    access { admin storefront }
+    access { admin storefront customerAccount }
     capabilities {
       publishable { enabled }
       translatable { enabled }
-      renderable { enabled }
+      renderable { enabled data { metaTitleKey metaDescriptionKey } }
+      onlineStore { enabled data { urlHandle } }
     }
   }
 }`;
