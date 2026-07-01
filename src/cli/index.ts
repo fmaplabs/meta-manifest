@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { SyncTransportError } from "../sync/client";
 import { createAdminClient } from "../node/client";
 import { loadConfig, loadSchemas } from "./load-config";

@@ -4,10 +4,21 @@
   "type": "module",
   "engines": { "node": ">=20.19 <22 || >=22.12" },
   "author": "kyle",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" },
+    "./node": { "types": "./dist/node/client.d.ts", "import": "./dist/node/client.js", "require": "./dist/node/client.cjs" }
+  },
+  "bin": { "meta-manifest": "./dist/cli/index.js", "mm": "./dist/cli/index.js" },
+  "files": ["dist"],
   "scripts": {
+    "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "jiti": "^2.4.2"
