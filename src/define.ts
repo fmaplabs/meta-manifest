@@ -97,7 +97,7 @@ export function defineMetaobject<F extends Record<string, unknown>>(
     toDefinitionInput: () => toDefinitionInput(schemaRef as unknown as MetaobjectSchema<FieldMap>),
     ["~standard"]: {
       version: 1 as const,
-      vendor: "meta-manifest",
+      vendor: "@meta-manifest/core",
       validate: (input: unknown) => parse(input as ParseInput),
     },
   };
