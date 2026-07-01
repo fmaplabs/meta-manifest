@@ -44,4 +44,45 @@ describe("planFor", () => {
     expect(plan.map((op) => op.kind)).toEqual(["createDefinition"]);
     expect(warnings.some((w) => w.includes("orphaned"))).toBe(true);
   });
+
+  // Exercises the real CLI pipeline (resolveDefinitions → normalizeDefinition → diff),
+  // which — unlike normalizeLocal — injects admin access. This is where a first-push
+  // "updateDefinition (access)" would come from, so pin the behavior explicitly.
+  function remoteNode(admin: string) {
+    return {
+      id: "gid://shopify/MetaobjectDefinition/1",
+      name: "A",
+      type: "app--1--a",
+      description: null,
+      displayNameKey: null,
+      access: { admin, storefront: null, customerAccount: null },
+      capabilities: {
+        publishable: { enabled: false },
+        translatable: { enabled: false },
+        renderable: { enabled: false, data: null },
+        onlineStore: { enabled: false, data: null },
+      },
+      fieldDefinitions: [
+        { key: "n", name: "n", description: null, required: true, type: { name: "single_line_text_field" }, validations: [], capabilities: { adminFilterable: { enabled: false } } },
+      ],
+    };
+  }
+  const clientReturning = (admin: string): AdminGraphQLClient => async () => ({
+    data: { metaobjectDefinitionByType: remoteNode(admin) },
+  });
+
+  it("does not churn when the remote app-owned admin already matches the resolved default", async () => {
+    const { plan } = await planFor(clientReturning("MERCHANT_READ"), [A], {});
+    expect(plan).toEqual([]);
+  });
+
+  it("reconciles admin access when the resolved value differs from remote", async () => {
+    const readOnly = await planFor(clientReturning("MERCHANT_READ_WRITE"), [A], {});
+    const upd = readOnly.plan.find((op) => op.kind === "updateDefinition");
+    expect(upd?.kind === "updateDefinition" && upd.changes).toEqual(["access"]);
+
+    // merchantEditable:true resolves admin to MERCHANT_READ_WRITE, matching remote → no churn.
+    const writable = await planFor(clientReturning("MERCHANT_READ_WRITE"), [A], { merchantEditable: true });
+    expect(writable.plan).toEqual([]);
+  });
 });
