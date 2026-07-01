@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-const CONFIG_TEMPLATE = `import { defineConfig } from "meta-manifest";
+const CONFIG_TEMPLATE = `import { defineConfig } from "@meta-manifest/core";
 
 export default defineConfig({
   shop: "my-store.myshopify.com",
@@ -10,7 +10,7 @@ export default defineConfig({
 });
 `;
 
-const SCHEMA_TEMPLATE = `import { defineMetaobject, m } from "meta-manifest";
+const SCHEMA_TEMPLATE = `import { defineMetaobject, m } from "@meta-manifest/core";
 
 export const Author = defineMetaobject("author", {
   name: "Author",

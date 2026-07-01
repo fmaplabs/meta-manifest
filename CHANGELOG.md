@@ -5,9 +5,9 @@
 Pivot to a standalone npm package + `mm` CLI.
 
 - The repo is no longer a Shopify embedded app. It is now a single published package,
-  `meta-manifest`, exposing a library entry (`import { defineMetaobject, m, defineConfig, ... }
-  from "meta-manifest"`), a Node-only client entry (`import { createAdminClient } from
-  "meta-manifest/node"`), and a CLI bin (`mm` / `meta-manifest`).
+  `@meta-manifest/core`, exposing a library entry (`import { defineMetaobject, m, defineConfig, ... }
+  from "@meta-manifest/core"`), a Node-only client entry (`import { createAdminClient } from
+  "@meta-manifest/core/node"`), and a CLI bin (`mm` / `meta-manifest`).
 - New CLI commands: `init` (scaffold config + schema), `pull` (codegen `schema.ts` from a live
   store), `diff` (preview a sync plan), `push` (apply it, topologically ordered and
   destructive-gated behind `--allow-destructive`).

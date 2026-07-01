@@ -1,6 +1,7 @@
 {
-  "name": "meta-manifest",
+  "name": "@meta-manifest/core",
   "version": "0.1.0",
+  "publishConfig": { "access": "public" },
   "type": "module",
   "engines": { "node": ">=20.19 <22 || >=22.12" },
   "author": "kyle",
