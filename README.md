@@ -63,7 +63,9 @@ reconciled, destructive-change gating, dependency ordering, error handling), see
 
 ## CLI
 
-The CLI drives sync against a real store using an Admin API access token.
+The CLI drives sync against a real store using an Admin API access token. For a
+step-by-step walk-through (install → token → `init` → `pull`/`diff`/`push`, with
+example output and CI usage), see the [CLI quick start & usage guide](./docs/CLI.md).
 
 ### Config
 
