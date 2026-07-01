@@ -16,24 +16,26 @@ Only the two edges (`pull`, `push`) touch the network, and they do it through a
 client **you inject** — the package itself has zero runtime dependencies and no
 knowledge of how you talk to Shopify.
 
-The runnable version of everything below is in
-[`../examples/schema.ts`](../examples/schema.ts) and
-[`../examples/sync.ts`](../examples/sync.ts):
+A runnable version of everything below (define → pull → diff → push, against a
+fake in-memory store) is [`../src/sync/sync.e2e.test.ts`](../src/sync/sync.e2e.test.ts):
 
 ```bash
-pnpm --filter @meta-manifest/core example
+pnpm test
 ```
+
+If you just want a store synced without writing this glue yourself, use the CLI
+instead: `mm pull` / `mm diff` / `mm push` drive this exact model against a real
+store over an Admin API token — see the root [`README.md`](../README.md#cli).
 
 ---
 
 ## 1. Define your schemas
 
-See [`../examples/schema.ts`](../examples/schema.ts). The example defines
-`Material` and `Product`, where `Product.specs` is a `list(ref(Material))` — a
-reference that makes `Product` depend on `Material`.
+The example below defines `Material` and `Product`, where `Product.specs` is a
+`list(ref(Material))` — a reference that makes `Product` depend on `Material`.
 
 ```ts
-import { defineMetaobject, m } from "@meta-manifest/core";
+import { defineMetaobject, m } from "meta-manifest";
 
 export const Material = defineMetaobject("material", {
   name: "Material",
@@ -67,30 +69,34 @@ export interface AdminGraphQLClient {
 }
 ```
 
-In this repo's Shopify React Router app, `authenticate.admin(request)` yields an
-`admin.graphql(query, { variables })` that returns a `Response`. Adapting it is
-one line:
+The package ships a ready-made standalone client for Node — `createAdminClient`
+from the `meta-manifest/node` subpath export — which is what the CLI uses
+internally:
 
 ```ts
-// app/routes/app.metaobjects.sync.tsx
-import type { ActionFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
-import type { AdminGraphQLClient } from "@meta-manifest/core";
+import { createAdminClient } from "meta-manifest/node";
 
-export async function action({ request }: ActionFunctionArgs) {
-  const { admin } = await authenticate.admin(request);
-
-  const client: AdminGraphQLClient = (query, options) =>
-    admin.graphql(query, options).then((response) => response.json());
-
-  // ...pull → diff → push (sections 3–5)...
-}
+const client = createAdminClient({
+  shop: "my-store.myshopify.com",
+  accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
+  // apiVersion is optional; defaults to DEFAULT_API_VERSION
+});
 ```
 
-> **Prerequisite.** `@meta-manifest/core` is a private workspace package, so add
-> it to the app's dependencies first: `"@meta-manifest/core": "workspace:*"` in
-> the root `package.json`, then `pnpm install`. (Nothing in the app imports it
-> yet.)
+It POSTs to `https://{shop}/admin/api/{apiVersion}/graphql.json` with an
+`X-Shopify-Access-Token` header, returns `{ data, errors }`, and throws
+`SyncTransportError` on a non-OK response or network failure.
+
+If you're embedding sync in your own app (Shopify-embedded or otherwise) instead
+of using the CLI, adapt whatever GraphQL-executing function you already have to
+the same shape:
+
+```ts
+import type { AdminGraphQLClient } from "meta-manifest";
+
+const client: AdminGraphQLClient = (query, options) =>
+  myExistingAdminFetcher(query, options?.variables).then((response) => response.json());
+```
 
 The client is the *only* Shopify-specific glue. Everything else is pure data.
 
@@ -104,7 +110,7 @@ a create for it). Each returned entry carries the definition's GID `id`, which
 `push` needs to update fields later.
 
 ```ts
-import { pull } from "@meta-manifest/core";
+import { pull } from "meta-manifest";
 
 const types = [Material.type, Product.type]; // ["$app:material", "$app:product_spec"]
 const remote = await pull(client, types); // PulledRemote[]  (missing types absent)
@@ -118,7 +124,7 @@ const remote = await pull(client, types); // PulledRemote[]  (missing types abse
 against **normalized** remote definitions and returns a plan.
 
 ```ts
-import { diff, normalizeLocal, normalizeRemote } from "@meta-manifest/core";
+import { diff, normalizeLocal, normalizeRemote } from "meta-manifest";
 
 // ⚠️ Normalize each schema individually. `schemas.map(normalizeLocal)` does NOT
 // typecheck: a heterogeneous array of schemas can't unify normalizeLocal's
@@ -153,7 +159,7 @@ you can inspect, log, or gate on the plan before pushing anything.
   field updates target.
 
 ```ts
-import { push } from "@meta-manifest/core";
+import { push } from "meta-manifest";
 
 const result = await push(client, plan, {
   definitions: [Material.toDefinitionInput(), Product.toDefinitionInput()],
@@ -212,7 +218,7 @@ Two failure channels, deliberately kept separate:
   `ok` becomes false. Inspect `result.results` to see which.
 
 ```ts
-import { SyncTransportError } from "@meta-manifest/core";
+import { SyncTransportError } from "meta-manifest";
 
 try {
   const result = await push(client, plan, { definitions, remote });
@@ -229,68 +235,56 @@ try {
 
 ---
 
-## 7. Putting it together (server action)
+## 7. Putting it together (standalone script)
+
+This is the same wiring `mm push` does under the hood, using the built-in
+Node client instead of a Shopify-app session:
 
 ```ts
-// app/routes/app.metaobjects.sync.tsx
-import type { ActionFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
-import {
-  diff, normalizeLocal, normalizeRemote, pull, push,
-  type AdminGraphQLClient,
-} from "@meta-manifest/core";
-import { Material, Product, schemas } from "../metaobjects/schema"; // your defineMetaobject(...) file
+import { createAdminClient } from "meta-manifest/node";
+import { diff, normalizeLocal, normalizeRemote, pull, push } from "meta-manifest";
+import { Material, Product, schemas } from "./schema"; // your defineMetaobject(...) file
 
-export async function action({ request }: ActionFunctionArgs) {
-  const { admin } = await authenticate.admin(request);
-  const client: AdminGraphQLClient = (query, options) =>
-    admin.graphql(query, options).then((r) => r.json());
+const client = createAdminClient({
+  shop: "my-store.myshopify.com",
+  accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
+});
 
-  const types = schemas.map((s) => s.type);
-  const local = [normalizeLocal(Material), normalizeLocal(Product)]; // per schema — see §4
-  const definitions = schemas.map((s) => s.toDefinitionInput());
+const types = schemas.map((s) => s.type);
+const local = [normalizeLocal(Material), normalizeLocal(Product)]; // per schema — see §4
+const definitions = schemas.map((s) => s.toDefinitionInput());
 
-  const remote = await pull(client, types);
-  const plan = diff(local, remote.map((r) => normalizeRemote(r.definition)));
-  const result = await push(client, plan, { definitions, remote });
+const remote = await pull(client, types);
+const plan = diff(local, remote.map((r) => normalizeRemote(r.definition)));
+const result = await push(client, plan, { definitions, remote });
 
-  return { plan, counts: result.counts, ok: result.ok };
-}
+console.log(plan, result.counts, result.ok);
 ```
+
+If you're embedding sync in your own Shopify app instead, swap `createAdminClient`
+for an `AdminGraphQLClient` adapter around your existing session-based GraphQL
+call (see §2) — everything else here is identical.
 
 ---
 
 ## Running the example
 
+There's no separate example script — the equivalent scenarios are exercised
+directly by the test suite:
+
 ```bash
-pnpm --filter @meta-manifest/core example
+pnpm test
 ```
 
-Expected output (verbatim):
-
-```
-Scenario A — empty store
-  plan: createDefinition, createDefinition
-    createDefinition $app:material: applied
-    createDefinition $app:product_spec: applied
-  counts: {"applied":2,"skipped":0,"blocked":0,"failed":0}  ok: true
-  create order: $app:material → $app:product_spec  (referenced type first)
-
-Scenario B — drifted store (allowDestructive: false, the default)
-  plan: updateField, addField, removeField
-    updateField $app:product_spec.title: applied
-    addField $app:product_spec.rating: applied
-    removeField $app:product_spec.sku: skipped  ← destructive
-  counts: {"applied":2,"skipped":1,"blocked":0,"failed":0}  ok: true
-
-Scenario B — same plan, allowDestructive: true
-  plan: updateField, addField, removeField
-    updateField $app:product_spec.title: applied
-    addField $app:product_spec.rating: applied
-    removeField $app:product_spec.sku: applied
-  counts: {"applied":3,"skipped":0,"blocked":0,"failed":0}  ok: true
-```
-
-The example injects an **in-file fake `AdminGraphQLClient`** so it runs offline
-with no store. In a real app, that fake is the only thing you replace — with the
-`admin.graphql` wiring from §2.
+[`../src/sync/sync.e2e.test.ts`](../src/sync/sync.e2e.test.ts) runs define →
+pull → diff → push end-to-end against a fake, in-file `AdminGraphQLClient` (an
+empty store, asserting referenced-type-first create ordering).
+[`../src/sync/push.test.ts`](../src/sync/push.test.ts) covers the rest of the
+scenarios described above against the same kind of fake client — destructive
+ops skipped by default and applied under `allowDestructive: true`, `blocked`
+ops from missing dependencies/reference cycles, `failed` ops from
+`userErrors`, and the `counts`/`ok` aggregation. Both use a hand-written fake
+client (keyed on the query/mutation constants exported from
+[`../src/sync/client.ts`](../src/sync/client.ts)) instead of a real store, so
+they run fully offline. In a real app, that fake is the only thing you'd
+replace — with the client wiring from §2.
