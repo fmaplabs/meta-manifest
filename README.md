@@ -99,9 +99,18 @@ npx mm pull                    # bootstrap schema.ts from an existing store
 npx mm diff                    # preview what push would do
 npx mm push                    # apply non-destructive changes
 npx mm push --allow-destructive  # also apply field removals/type changes
+npx mm pull --force             # overwrite an existing schema.ts without the warning
+npx mm diff --config ./staging.config.ts  # use a non-default config file
 ```
 
-`mm push` exits `2` if any operation failed (so CI can detect a partial failure), `1` on a
+### Flags
+
+- `--config <path>` — use a non-default config file instead of `meta-manifest.config.ts`.
+- `--allow-destructive` — apply destructive changes (`removeField`/`changeFieldType`) on push.
+- `--force` — overwrite the schema file on `pull` without the "overwriting" warning.
+
+`mm push` exits `2` if any operation failed **or was blocked** (e.g. a reference cycle among the
+definitions being created in that push — so CI can detect a partial failure), `1` on a
 config/transport error, and `0` otherwise — including when destructive ops were skipped.
 
 ## Roadmap: runtime query client

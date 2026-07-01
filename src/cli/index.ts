@@ -68,7 +68,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (args.command === "push") {
       const result = await runPush({ client, schemas, allowDestructive: args.allowDestructive });
-      return result.counts.failed > 0 ? 2 : 0;
+      return result.ok ? 0 : 2;
     }
     console.error(`Unknown command: ${args.command}`);
     console.log(HELP);

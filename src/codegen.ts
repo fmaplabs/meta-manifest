@@ -127,7 +127,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
       warnings.push(`unresolved reference on field "${field.key}"`);
       return `m.json() /* TODO: unmapped reference */`;
     }
-    return field.required ? `m.ref(${ident}, { required: true })` : `m.ref(${ident})`;
+    return field.required ? `m.ref(() => ${ident}, { required: true })` : `m.ref(() => ${ident})`;
   }
 
   if (type.startsWith("list.")) {
@@ -147,7 +147,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
         warnings.push(`unresolved list reference on field "${field.key}"`);
         return `m.json() /* TODO: unmapped list reference */`;
       }
-      innerCall = `m.ref(${ident})`;
+      innerCall = `m.ref(() => ${ident})`;
     } else if (SIMPLE[inner]) {
       // Inner scalar validations (min/max/regex/…) live on the same field; reuse scalarEntries
       // but drop list.* names (already consumed above).
