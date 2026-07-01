@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createJiti } from "jiti";
 import { defineMetaobject, m } from "./index";
-import { normalizeLocal, normalizeRemote } from "./sync/normalize";
+import { normalizeLocal } from "./sync/normalize";
 import { diff } from "./sync/diff";
 import { generateSchemaSource } from "./codegen";
 import type { RemoteDefinition } from "./sync/normalize";
@@ -48,5 +48,28 @@ describe("generateSchemaSource", () => {
     expect(source.indexOf("const Material")).toBeLessThan(source.indexOf("const ProductSpec"));
     expect(source).toContain("m.list(m.ref(Material))");
     expect(source).toContain('export const schemas = [Material, ProductSpec]');
+  });
+
+  it("round-trips a date field with min/max (emitted as string literals, not Number(...))", async () => {
+    const Event = defineMetaobject("event", {
+      name: "Event",
+      fields: {
+        happensOn: m.date({ min: "2020-01-01", max: "2030-12-31" }),
+      },
+    });
+    const local: RemoteDefinition[] = [normalizeLocal(Event)];
+    const source = generateSchemaSource(local);
+
+    const dir = mkdtempSync(join(tmpdir(), "mm-codegen-date-"));
+    const file = join(dir, "schema.ts");
+    // Rewrite the package import to the built source under test.
+    writeFileSync(file, source.replace('from "meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+
+    const jiti = createJiti(import.meta.url);
+    const mod = await jiti.import<{ schemas: AnySchema[] }>(file);
+    const regenerated = mod.schemas.map(normalizeLocal);
+
+    const plan = diff(regenerated, local);
+    expect(plan).toEqual([]);
   });
 });

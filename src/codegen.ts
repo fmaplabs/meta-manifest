@@ -64,7 +64,7 @@ function optsLiteral(entries: string[]): string {
 }
 
 /** Number/string/JSON-array validation → option entries for scalar builders. */
-function scalarEntries(field: RemoteField, warnings: string[]): string[] {
+function scalarEntries(field: RemoteField, warnings: string[], builder: string): string[] {
   const e: string[] = [];
   if (field.required) e.push("required: true");
   const num = (name: string, opt: string) => {
@@ -85,8 +85,15 @@ function scalarEntries(field: RemoteField, warnings: string[]): string[] {
       }
     }
   };
-  num("min", "min");
-  num("max", "max");
+  // `date`/`date_time` store min/max as ISO date strings, not numbers — emit them as
+  // quoted string literals so they round-trip (Number("2020-01-01") is NaN).
+  if (builder === "date" || builder === "dateTime") {
+    str("min", "min");
+    str("max", "max");
+  } else {
+    num("min", "min");
+    num("max", "max");
+  }
   str("regex", "regex");
   jsonArr("choices", "choices");
   num("max_precision", "maxPrecision");
@@ -96,7 +103,7 @@ function scalarEntries(field: RemoteField, warnings: string[]): string[] {
 }
 
 function scalarCall(builder: string, field: RemoteField, warnings: string[]): string {
-  const lit = optsLiteral(scalarEntries(field, warnings));
+  const lit = optsLiteral(scalarEntries(field, warnings, builder));
   return lit ? `m.${builder}(${lit})` : `m.${builder}()`;
 }
 
