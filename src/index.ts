@@ -23,7 +23,7 @@ export type { DiffOp } from "./sync/diff";
 export { normalizeLocal, normalizeRemote } from "./sync/normalize";
 export type { RemoteDefinition, RemoteField } from "./sync/normalize";
 
-export { pull } from "./sync/pull";
+export { pull, pullAll } from "./sync/pull";
 export type { PulledRemote } from "./sync/pull";
 export { push } from "./sync/push";
 export type { PushOptions, PushResult, PushOpResult } from "./sync/push";

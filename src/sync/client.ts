@@ -36,6 +36,25 @@ export const PULL_DEFINITION_QUERY = `query PullMetaobjectDefinition($type: Stri
   }
 }`;
 
+export const LIST_DEFINITIONS_QUERY = `query ListMetaobjectDefinitions($after: String) {
+  metaobjectDefinitions(first: 50, after: $after) {
+    nodes {
+      id
+      name
+      type
+      fieldDefinitions {
+        key
+        name
+        description
+        required
+        type { name }
+        validations { name value }
+      }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
 export const CREATE_DEFINITION_MUTATION = `mutation CreateMetaobjectDefinition($definition: MetaobjectDefinitionCreateInput!) {
   metaobjectDefinitionCreate(definition: $definition) {
     metaobjectDefinition { id type }
