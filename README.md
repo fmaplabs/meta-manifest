@@ -82,9 +82,10 @@ export default defineConfig({
 });
 ```
 
-Set `SHOPIFY_ADMIN_TOKEN` in your environment before running `pull`, `diff`, or `push`. The token
-needs the `read_metaobject_definitions` scope for `pull`/`diff`, and `write_metaobject_definitions`
-(which implies read) for `push`.
+Set `SHOPIFY_ADMIN_TOKEN` before running `pull`, `diff`, or `push` — either export it into your
+shell or put it in a `.env` file in the project root, which the CLI loads automatically (real
+environment variables take precedence). The token needs the `read_metaobject_definitions` scope for
+`pull`/`diff`, and `write_metaobject_definitions` (which implies read) for `push`.
 
 ### Commands
 

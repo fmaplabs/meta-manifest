@@ -45,11 +45,19 @@ API access token you grant the scopes above. See Shopify's
 [custom-app / Admin API access token docs](https://help.shopify.com/en/manual/apps/app-types/custom-apps)
 for the current click-path.
 
-Export the token before running any networked command — the config file reads it
-from the environment so it's safe to commit:
+Provide the token before running any networked command — the config file reads it
+from the environment so it's safe to commit. Either export it:
 
 ```bash
 export SHOPIFY_ADMIN_TOKEN="shpat_…"
+```
+
+or put it in a `.env` file in the project root, which the CLI loads automatically
+(a real exported variable wins over the file, and a missing `.env` is ignored):
+
+```bash
+# .env
+SHOPIFY_ADMIN_TOKEN=shpat_…
 ```
 
 ---
@@ -64,7 +72,7 @@ npx mm init
 
 ```
 Created: meta-manifest.config.ts, src/schema.ts
-Next: set SHOPIFY_ADMIN_TOKEN in your env, edit meta-manifest.config.ts, then run `mm diff`.
+Next: set SHOPIFY_ADMIN_TOKEN (export it or add it to .env), edit meta-manifest.config.ts, then run `mm diff`.
 ```
 
 (If both files already exist you'll get `Nothing to do — config and schema already exist.`)
@@ -281,7 +289,7 @@ intentional and reviewed.
 | ------- | ----------- |
 | `Invalid config: missing or empty "shop"` (or `accessToken` / `schema`) | The config's required field is unset. Check
 `meta-manifest.config.ts` (or the `--config` file). Because the config reads the token via
-`process.env.SHOPIFY_ADMIN_TOKEN!`, **an unset token surfaces here as `accessToken`** — export it (step 2). |
+`process.env.SHOPIFY_ADMIN_TOKEN!`, **an unset token surfaces here as `accessToken`** — export it or add it to `.env` (step 2). |
 | `Schema module "…" must export a schemas array.` | `src/schema.ts` doesn't `export const schemas = [...]`. Add it. |
 | `Sync failed: Shopify rejected a request.` (exit 1) | The request reached Shopify and was refused — a bad or expired
 token (present but rejected), a wrong `shop`, or missing scopes. |

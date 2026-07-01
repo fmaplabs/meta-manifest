@@ -38,7 +38,7 @@ export async function runInit(opts: { cwd?: string } = {}): Promise<{ created: s
   write("src/schema.ts", SCHEMA_TEMPLATE);
   if (created.length) {
     console.log(`Created: ${created.join(", ")}`);
-    console.log("Next: set SHOPIFY_ADMIN_TOKEN in your env, edit meta-manifest.config.ts, then run `mm diff`.");
+    console.log("Next: set SHOPIFY_ADMIN_TOKEN (export it or add it to .env), edit meta-manifest.config.ts, then run `mm diff`.");
   } else {
     console.log("Nothing to do — config and schema already exist.");
   }

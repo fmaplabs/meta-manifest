@@ -2,6 +2,7 @@
 import { SyncTransportError } from "../sync/client";
 import { createAdminClient } from "../node/client";
 import { loadConfig, loadSchemas } from "./load-config";
+import { loadDotEnv } from "./load-env";
 import { runInit } from "./init";
 import { runDiff } from "./diff";
 import { runPush } from "./push";
@@ -55,6 +56,7 @@ export async function main(argv: string[]): Promise<number> {
       await runInit();
       return 0;
     }
+    loadDotEnv();
     const config = await loadConfig(args.config);
     const client = createAdminClient(config);
     if (args.command === "pull") {
