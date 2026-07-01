@@ -65,11 +65,11 @@ export async function main(argv: string[]): Promise<number> {
     }
     const schemas = await loadSchemas(config.schema);
     if (args.command === "diff") {
-      await runDiff({ client, schemas });
+      await runDiff({ client, schemas, config });
       return 0;
     }
     if (args.command === "push") {
-      const result = await runPush({ client, schemas, allowDestructive: args.allowDestructive });
+      const result = await runPush({ client, schemas, config, allowDestructive: args.allowDestructive });
       return result.ok ? 0 : 2;
     }
     console.error(`Unknown command: ${args.command}`);

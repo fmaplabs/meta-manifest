@@ -1,12 +1,10 @@
-import { Field, type DecodeResult, type FieldValidation } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation } from "./base";
 
 export interface Measure {
   value: number;
   unit: string;
 }
-interface MeasureOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+interface MeasureOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
 }
 
@@ -14,9 +12,7 @@ class MeasurementField<R extends boolean> extends Field<Measure, Measure, R> {
   protected override readonly wireIsJson = true;
   constructor(opts: MeasureOptions<R>, readonly shopifyType: "dimension" | "weight" | "volume") {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   validations(): FieldValidation[] {
     return [];

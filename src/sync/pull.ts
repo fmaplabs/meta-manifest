@@ -1,6 +1,6 @@
 import type { AdminGraphQLClient } from "./client";
 import { execute, PULL_DEFINITION_QUERY, LIST_DEFINITIONS_QUERY } from "./client";
-import type { PulledDefinition, PulledFieldDefinition } from "./normalize";
+import type { PulledAccess, PulledCapabilities, PulledDefinition, PulledFieldDefinition } from "./normalize";
 
 /**
  * A definition read back from the store. `type` is the canonical "$app:…" key
@@ -18,7 +18,24 @@ interface PullNode {
   id: string;
   name?: string;
   type: string;
+  description?: string | null;
+  displayNameKey?: string | null;
+  access?: PulledAccess | null;
+  capabilities?: PulledCapabilities | null;
   fieldDefinitions: PulledFieldDefinition[];
+}
+
+/** Carry the pulled definition-level metadata into the normalize/diff shape. */
+function toDefinition(type: string, node: PullNode): PulledDefinition {
+  return {
+    type,
+    name: node.name,
+    description: node.description,
+    displayNameKey: node.displayNameKey,
+    access: node.access,
+    capabilities: node.capabilities,
+    fieldDefinitions: node.fieldDefinitions,
+  };
 }
 interface PullResponse {
   metaobjectDefinitionByType: PullNode | null;
@@ -35,11 +52,7 @@ export async function pull(client: AdminGraphQLClient, types: readonly string[])
     const data = await execute<PullResponse>(client, PULL_DEFINITION_QUERY, { type });
     const node = data.metaobjectDefinitionByType;
     if (!node) continue;
-    out.push({
-      id: node.id,
-      type,
-      definition: { type, name: node.name, fieldDefinitions: node.fieldDefinitions },
-    });
+    out.push({ id: node.id, type, definition: toDefinition(type, node) });
   }
   return out;
 }
@@ -75,7 +88,7 @@ export async function pullAll(
       const canonical = toCanonicalType(node.type);
       if (appOwnedOnly && !canonical) continue;
       const type = canonical ?? node.type;
-      out.push({ id: node.id, type, definition: { type, name: node.name, fieldDefinitions: node.fieldDefinitions } });
+      out.push({ id: node.id, type, definition: toDefinition(type, node) });
     }
     after = data.metaobjectDefinitions.pageInfo.hasNextPage ? data.metaobjectDefinitions.pageInfo.endCursor : null;
   } while (after !== null);

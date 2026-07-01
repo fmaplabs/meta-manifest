@@ -112,6 +112,53 @@ describe("generateSchemaSource", () => {
     expect(plan).toEqual([]);
   });
 
+  it("round-trips access, capabilities, displayName, description, and per-field filterable", async () => {
+    const Rich = defineMetaobject("rich", {
+      name: "Rich",
+      description: "A rich metaobject",
+      displayName: "title",
+      access: { admin: "merchant_read_write", storefront: "public_read", customerAccount: "read" },
+      capabilities: {
+        publishable: true,
+        translatable: true,
+        renderable: { metaTitleKey: "title", metaDescriptionKey: "summary" },
+        onlineStore: { urlHandle: "rich-pages" },
+      },
+      fields: { title: m.text({ required: true, filterable: true }), summary: m.multilineText() },
+    });
+    const local: RemoteDefinition[] = [normalizeLocal(Rich)];
+    const source = generateSchemaSource(local);
+    expect(source).toContain('access: { admin: "merchant_read_write", storefront: "public_read", customerAccount: "read" }');
+    expect(source).toContain("m.text({ required: true, filterable: true })");
+    expect(source).toContain('onlineStore: { urlHandle: "rich-pages" }');
+
+    const dir = mkdtempSync(join(tmpdir(), "mm-codegen-opts-"));
+    const file = join(dir, "schema.ts");
+    writeFileSync(file, source.replace('from "@fmaplabs/meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+    const jiti = createJiti(import.meta.url);
+    const mod = await jiti.import<{ schemas: AnySchema[] }>(file);
+    const regenerated = mod.schemas.map(normalizeLocal);
+    expect(diff(regenerated, local)).toEqual([]);
+  });
+
+  it("emits scope: \"merchant\" for a bare (merchant-owned) type and omits it for app types", () => {
+    const merchantDef: RemoteDefinition = {
+      type: "author",
+      name: "Author",
+      capabilities: { onlineStore: { enabled: false } },
+      fields: [{ key: "name", type: "single_line_text_field", required: false, filterable: false, validations: [] }],
+    };
+    const appDef: RemoteDefinition = {
+      type: "$app:tag",
+      name: "Tag",
+      capabilities: { onlineStore: { enabled: false } },
+      fields: [{ key: "label", type: "single_line_text_field", required: false, filterable: false, validations: [] }],
+    };
+    const source = generateSchemaSource([merchantDef, appDef]);
+    expect(source).toContain('defineMetaobject("author", {\n  scope: "merchant",');
+    expect(source.slice(source.indexOf("const Tag"))).not.toContain("scope:");
+  });
+
   it("emits lazy thunks for a two-node reference cycle (NodeA <-> NodeB), so the generated source loads without a TDZ ReferenceError", async () => {
     const local: RemoteDefinition[] = [normalizeLocal(NodeA), normalizeLocal(NodeB)];
     const source = generateSchemaSource(local);

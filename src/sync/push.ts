@@ -1,7 +1,13 @@
 import type { FieldValidation } from "../fields/base";
-import type { FieldDefinitionInput, MetaobjectDefinitionInput } from "../definition-input";
+import type {
+  AccessInput,
+  CapabilitiesInput,
+  FieldCapabilitiesInput,
+  FieldDefinitionInput,
+  MetaobjectDefinitionInput,
+} from "../definition-input";
 import { CREATE_DEFINITION_MUTATION, execute, UPDATE_DEFINITION_MUTATION, type AdminGraphQLClient } from "./client";
-import type { DiffOp } from "./diff";
+import type { DefinitionChange, DiffOp } from "./diff";
 import type { PulledRemote } from "./pull";
 
 export interface PushOptions {
@@ -23,10 +29,49 @@ export interface PushResult {
 
 type UserError = { field?: string[]; message: string; code?: string };
 type MutationPayload = { metaobjectDefinition?: { id?: string } | null; userErrors: UserError[] };
-type FieldOpInput =
-  | { create: FieldDefinitionInput }
-  | { update: { key: string; name: string; description?: string; required: boolean; validations: FieldValidation[] } }
-  | { delete: { key: string } };
+type FieldUpdateInput = {
+  key: string;
+  name: string;
+  description?: string;
+  required: boolean;
+  validations: FieldValidation[];
+  capabilities?: FieldCapabilitiesInput;
+};
+type FieldOpInput = { create: FieldDefinitionInput } | { update: FieldUpdateInput } | { delete: { key: string } };
+
+/** The `MetaobjectDefinitionUpdateInput` metadata carried by an `updateDefinition` op. */
+interface DefinitionUpdateInput {
+  name?: string;
+  description?: string;
+  displayNameKey?: string;
+  access?: AccessInput;
+  capabilities?: CapabilitiesInput;
+}
+
+/**
+ * Build the definition-level update payload for the changed fields. `capabilities`
+ * always sends an explicit `onlineStore` (absence means disabled — decision 4) so a
+ * removed `onlineStore` config reconciles the live capability off. [design §8]
+ */
+function definitionUpdateFor(def: MetaobjectDefinitionInput, changes: DefinitionChange[]): DefinitionUpdateInput {
+  const out: DefinitionUpdateInput = {};
+  for (const c of changes) {
+    if (c === "name") out.name = def.name;
+    else if (c === "description") out.description = def.description;
+    else if (c === "displayNameKey") out.displayNameKey = def.displayNameKey;
+    else if (c === "access") out.access = def.access;
+    else if (c === "capabilities") {
+      const caps = def.capabilities;
+      const payload: CapabilitiesInput = {};
+      if (caps?.publishable) payload.publishable = caps.publishable;
+      if (caps?.translatable) payload.translatable = caps.translatable;
+      if (caps?.renderable) payload.renderable = caps.renderable;
+      payload.onlineStore = caps?.onlineStore ?? { enabled: false };
+      out.capabilities = payload;
+    }
+  }
+  return out;
+}
 
 /** The full local field input for a field, used to build create/update payloads. [design §7] */
 function fieldInputFor(
@@ -171,7 +216,7 @@ export async function push(
       return { op, status: "applied", id };
     }
 
-    const destructive = op.kind === "removeField" || op.kind === "changeFieldType";
+    const destructive = "destructive" in op && op.destructive === true;
     if (destructive && !allowDestructive) return { op, status: "skipped", reason: "destructive" };
 
     if (failedTypes.has(op.type)) return { op, status: "blocked", reason: `blocked: definition "${op.type}" was not created` };
@@ -179,10 +224,18 @@ export async function push(
     const id = idByType.get(op.type);
     if (id == null) return { op, status: "blocked", reason: `no definition id for "${op.type}"` };
 
-    const fieldDefinitions = fieldOpsFor(op);
-    if (!fieldDefinitions) return { op, status: "blocked", reason: `no field input for "${op.type}"` };
+    let definition: { fieldDefinitions: FieldOpInput[] } | DefinitionUpdateInput;
+    if (op.kind === "updateDefinition") {
+      const def = defByType.get(op.type);
+      if (!def) return { op, status: "blocked", reason: `no definition input for "${op.type}"` };
+      definition = definitionUpdateFor(def, op.changes);
+    } else {
+      const fieldDefinitions = fieldOpsFor(op);
+      if (!fieldDefinitions) return { op, status: "blocked", reason: `no field input for "${op.type}"` };
+      definition = { fieldDefinitions };
+    }
 
-    const data = await execute<{ metaobjectDefinitionUpdate: MutationPayload }>(client, UPDATE_DEFINITION_MUTATION, { id, definition: { fieldDefinitions } });
+    const data = await execute<{ metaobjectDefinitionUpdate: MutationPayload }>(client, UPDATE_DEFINITION_MUTATION, { id, definition });
     const payload = data.metaobjectDefinitionUpdate;
     if (payload.userErrors.length) return { op, status: "failed", userErrors: payload.userErrors };
     return { op, status: "applied", id: payload.metaobjectDefinition?.id ?? id };
@@ -199,13 +252,17 @@ export async function push(
         const field = fieldInputFor(defByType, op.type, op.key);
         if (!field) return undefined;
         // `type` is immutable, so the update payload omits it. [design §7]
-        const update: { key: string; name: string; description?: string; required: boolean; validations: FieldValidation[] } = {
+        const update: FieldUpdateInput = {
           key: field.key,
           name: field.name,
           required: field.required,
           validations: field.validations,
         };
         if (field.description != null) update.description = field.description;
+        // Reconcile `adminFilterable` only when the field's filter state drifted. [design §8]
+        if ("filterable" in op.changes) {
+          update.capabilities = { adminFilterable: { enabled: op.changes.filterable ?? false } };
+        }
         return [{ update }];
       }
       case "removeField":

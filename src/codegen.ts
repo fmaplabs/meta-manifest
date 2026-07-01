@@ -1,7 +1,17 @@
-import type { RemoteDefinition, RemoteField } from "./sync/normalize";
+import type { RemoteAccess, RemoteCapabilities, RemoteDefinition, RemoteField } from "./sync/normalize";
 import type { FieldValidation } from "./fields/base";
 
 const APP_PREFIX = "$app:";
+
+/** A bare (non-`$app:`) type is merchant-scoped. [design §9] */
+function isMerchant(type: string): boolean {
+  return !type.startsWith(APP_PREFIX);
+}
+
+/** `filterable: true` option entry when the field is used as an admin filter. */
+function filterableEntry(field: RemoteField): string[] {
+  return field.filterable ? ["filterable: true"] : [];
+}
 
 /** Shopify scalar/reference type → m.* builder name (no special construction). */
 const SIMPLE: Record<string, string> = {
@@ -102,8 +112,8 @@ function scalarEntries(field: RemoteField, warnings: string[], builder: string):
   return e;
 }
 
-function scalarCall(builder: string, field: RemoteField, warnings: string[]): string {
-  const lit = optsLiteral(scalarEntries(field, warnings, builder));
+function scalarCall(builder: string, field: RemoteField, warnings: string[], extra: string[] = []): string {
+  const lit = optsLiteral([...scalarEntries(field, warnings, builder), ...extra]);
   return lit ? `m.${builder}(${lit})` : `m.${builder}()`;
 }
 
@@ -116,6 +126,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
     const max = v(field.validations, "max");
     const e = [`min: ${Number(min ?? 1)}`, `max: ${Number(max ?? 5)}`];
     if (field.required) e.unshift("required: true");
+    e.push(...filterableEntry(field));
     if (min === undefined || max === undefined) warnings.push(`rating field "${field.key}" missing min/max`);
     return `m.rating(${optsLiteral(e)})`;
   }
@@ -127,7 +138,11 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
       warnings.push(`unresolved reference on field "${field.key}"`);
       return `m.json() /* TODO: unmapped reference */`;
     }
-    return field.required ? `m.ref(() => ${ident}, { required: true })` : `m.ref(() => ${ident})`;
+    const refEntries: string[] = [];
+    if (field.required) refEntries.push("required: true");
+    refEntries.push(...filterableEntry(field));
+    const opts = optsLiteral(refEntries);
+    return opts ? `m.ref(() => ${ident}, ${opts})` : `m.ref(() => ${ident})`;
   }
 
   if (type.startsWith("list.")) {
@@ -138,6 +153,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
     const max = v(field.validations, "list.max");
     if (min !== undefined) listEntries.push(`min: ${Number(min)}`);
     if (max !== undefined) listEntries.push(`max: ${Number(max)}`);
+    listEntries.push(...filterableEntry(field));
     const listOpts = optsLiteral(listEntries);
     let innerCall: string;
     if (inner === "metaobject_reference") {
@@ -159,10 +175,53 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
     return listOpts ? `m.list(${innerCall}, ${listOpts})` : `m.list(${innerCall})`;
   }
 
-  if (SIMPLE[type]) return scalarCall(SIMPLE[type], field, warnings);
+  if (SIMPLE[type]) return scalarCall(SIMPLE[type], field, warnings, filterableEntry(field));
 
   warnings.push(`unmapped field type "${type}" on field "${field.key}"`);
   return `m.json() /* TODO: unmapped type ${type} */`;
+}
+
+/** Non-default access options as a config-object literal, or "" when all default. [design §9] */
+function accessSource(access: RemoteAccess | undefined): string {
+  if (!access) return "";
+  const parts: string[] = [];
+  if (access.admin === "MERCHANT_READ_WRITE") parts.push(`admin: "merchant_read_write"`);
+  if (access.storefront === "PUBLIC_READ") parts.push(`storefront: "public_read"`);
+  if (access.customerAccount === "READ") parts.push(`customerAccount: "read"`);
+  return parts.length ? `{ ${parts.join(", ")} }` : "";
+}
+
+/** Enabled capabilities as a config-object literal, or "" when none are on. [design §9] */
+function capabilitiesSource(caps: RemoteCapabilities | undefined): string {
+  if (!caps) return "";
+  const parts: string[] = [];
+  if (caps.publishable?.enabled) parts.push(`publishable: true`);
+  if (caps.translatable?.enabled) parts.push(`translatable: true`);
+  if (caps.renderable?.enabled) {
+    const d = caps.renderable.data;
+    const dparts: string[] = [];
+    if (d?.metaTitleKey != null) dparts.push(`metaTitleKey: ${JSON.stringify(d.metaTitleKey)}`);
+    if (d?.metaDescriptionKey != null) dparts.push(`metaDescriptionKey: ${JSON.stringify(d.metaDescriptionKey)}`);
+    parts.push(dparts.length ? `renderable: { ${dparts.join(", ")} }` : `renderable: true`);
+  }
+  if (caps.onlineStore?.enabled && caps.onlineStore.data?.urlHandle != null) {
+    parts.push(`onlineStore: { urlHandle: ${JSON.stringify(caps.onlineStore.data.urlHandle)} }`);
+  }
+  return parts.length ? `{ ${parts.join(", ")} }` : "";
+}
+
+/** The definition-level config entries (scope/name/displayName/description/access/capabilities). */
+function defConfigLines(def: RemoteDefinition): string {
+  const lines: string[] = [];
+  if (isMerchant(def.type)) lines.push(`  scope: "merchant",`);
+  if (def.name) lines.push(`  name: ${JSON.stringify(def.name)},`);
+  if (def.description != null) lines.push(`  description: ${JSON.stringify(def.description)},`);
+  if (def.displayNameKey != null) lines.push(`  displayName: ${JSON.stringify(def.displayNameKey)},`);
+  const access = accessSource(def.access);
+  if (access) lines.push(`  access: ${access},`);
+  const caps = capabilitiesSource(def.capabilities);
+  if (caps) lines.push(`  capabilities: ${caps},`);
+  return lines.length ? `\n${lines.join("\n")}` : "";
 }
 
 function defSource(def: RemoteDefinition, typeToIdent: Map<string, string>, warnings: string[]): string {
@@ -171,8 +230,7 @@ function defSource(def: RemoteDefinition, typeToIdent: Map<string, string>, warn
   const fields = def.fields
     .map((f) => `    ${f.key}: ${fieldCall(f, typeToIdent, warnings)},`)
     .join("\n");
-  const name = def.name ? `\n  name: ${JSON.stringify(def.name)},` : "";
-  return `export const ${ident} = defineMetaobject(${JSON.stringify(handle)}, {${name}
+  return `export const ${ident} = defineMetaobject(${JSON.stringify(handle)}, {${defConfigLines(def)}
   fields: {
 ${fields}
   },

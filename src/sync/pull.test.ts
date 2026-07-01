@@ -70,9 +70,10 @@ describe("pull", () => {
     expect(normalizeRemote(r.definition)).toEqual({
       type: "$app:author",
       name: "Author",
+      capabilities: {},
       fields: [
-        { key: "name", type: "single_line_text_field", required: true, validations: [{ name: "max", value: "120" }] },
-        { key: "bio", type: "multi_line_text_field", required: false, validations: [] },
+        { key: "name", type: "single_line_text_field", required: true, filterable: false, validations: [{ name: "max", value: "120" }] },
+        { key: "bio", type: "multi_line_text_field", required: false, filterable: false, validations: [] },
       ],
     });
   });

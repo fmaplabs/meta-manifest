@@ -27,4 +27,56 @@ describe("toDefinitionInput", () => {
       ],
     });
   });
+
+  it("maps customerAccount access (uppercased)", () => {
+    const S = defineMetaobject("s", {
+      name: "S",
+      access: { customerAccount: "read" },
+      fields: { a: m.text() },
+    });
+    expect(S.toDefinitionInput().access).toEqual({ customerAccount: "READ" });
+  });
+
+  it("maps renderable: true to { enabled: true }", () => {
+    const S = defineMetaobject("s", { name: "S", capabilities: { renderable: true }, fields: { a: m.text() } });
+    expect(S.toDefinitionInput().capabilities).toEqual({ renderable: { enabled: true } });
+  });
+
+  it("maps renderable object to enabled + SEO data keys", () => {
+    const S = defineMetaobject("s", {
+      name: "S",
+      capabilities: { renderable: { metaTitleKey: "title", metaDescriptionKey: "body" } },
+      fields: { title: m.text(), body: m.multilineText() },
+    });
+    expect(S.toDefinitionInput().capabilities).toEqual({
+      renderable: { enabled: true, data: { metaTitleKey: "title", metaDescriptionKey: "body" } },
+    });
+  });
+
+  it("maps onlineStore to enabled + urlHandle/createRedirects data", () => {
+    const S = defineMetaobject("s", {
+      name: "S",
+      capabilities: { onlineStore: { urlHandle: "authors", createRedirects: true } },
+      fields: { a: m.text() },
+    });
+    expect(S.toDefinitionInput().capabilities).toEqual({
+      onlineStore: { enabled: true, data: { urlHandle: "authors", createRedirects: true } },
+    });
+  });
+
+  it("maps a filterable field to adminFilterable capability", () => {
+    const S = defineMetaobject("s", { name: "S", fields: { a: m.text({ filterable: true }), b: m.text() } });
+    const [a, b] = S.toDefinitionInput().fieldDefinitions;
+    expect(a.capabilities).toEqual({ adminFilterable: { enabled: true } });
+    expect(b.capabilities).toBeUndefined();
+  });
+
+  it("throws when a renderable SEO key is not a declared field", () => {
+    const S = defineMetaobject("s", {
+      name: "S",
+      capabilities: { renderable: { metaTitleKey: "nope" } },
+      fields: { a: m.text() },
+    });
+    expect(() => S.toDefinitionInput()).toThrow(/metaTitleKey "nope" is not a declared field/);
+  });
 });

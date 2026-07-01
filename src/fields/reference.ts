@@ -1,17 +1,13 @@
-import { Field, type DecodeResult, type FieldValidation } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation } from "./base";
 
-interface RefOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+interface RefOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
 }
 
 abstract class GidField<R extends boolean> extends Field<string, string, R> {
   constructor(opts: RefOptions<R>) {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   protected toJson(value: string): unknown {
     return value;

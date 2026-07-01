@@ -261,6 +261,71 @@ describe("push — ordering and dependency gating", () => {
   });
 });
 
+describe("push — definition reconciliation", () => {
+  const reconcileRemote: PulledRemote = {
+    id: "gid://shopify/MetaobjectDefinition/author-1",
+    type: "$app:author",
+    definition: { type: "$app:author", name: "Author", fieldDefinitions: [] },
+  };
+
+  it("updateDefinition sends only the changed metadata and reports applied", async () => {
+    const Local = defineMetaobject("author", {
+      name: "Author v2",
+      access: { storefront: "public_read" },
+      capabilities: { publishable: true, onlineStore: { urlHandle: "authors", createRedirects: true } },
+      fields: { name: m.text({ required: true }) },
+    });
+    const { client, calls } = recordingClient();
+    const plan: DiffOp[] = [{ kind: "updateDefinition", type: "$app:author", changes: ["name", "access", "capabilities"] }];
+    const result = await push(client, plan, { definitions: [Local.toDefinitionInput()], remote: [reconcileRemote] });
+
+    expect(calls).toEqual([
+      {
+        query: UPDATE_DEFINITION_MUTATION,
+        variables: {
+          id: "gid://shopify/MetaobjectDefinition/author-1",
+          definition: {
+            name: "Author v2",
+            access: { storefront: "PUBLIC_READ" },
+            capabilities: {
+              publishable: { enabled: true },
+              onlineStore: { enabled: true, data: { urlHandle: "authors", createRedirects: true } },
+            },
+          },
+        },
+      },
+    ]);
+    expect(result.results[0]?.status).toBe("applied");
+  });
+
+  it("gates a destructive updateDefinition (onlineStore disable) behind allowDestructive", async () => {
+    const NoStore = defineMetaobject("author", { name: "Author", fields: { name: m.text({ required: true }) } });
+    const plan: DiffOp[] = [{ kind: "updateDefinition", type: "$app:author", changes: ["capabilities"], destructive: true }];
+
+    const safe = recordingClient();
+    const safeResult = await push(safe.client, plan, { definitions: [NoStore.toDefinitionInput()], remote: [reconcileRemote] });
+    expect(safe.calls).toEqual([]);
+    expect(safeResult.results[0]).toEqual({ op: plan[0], status: "skipped", reason: "destructive" });
+
+    const forced = recordingClient();
+    await push(forced.client, plan, { definitions: [NoStore.toDefinitionInput()], remote: [reconcileRemote] }, { allowDestructive: true });
+    expect(forced.calls[0]?.variables).toEqual({
+      id: "gid://shopify/MetaobjectDefinition/author-1",
+      definition: { capabilities: { onlineStore: { enabled: false } } },
+    });
+  });
+
+  it("updateField carries adminFilterable when filterable drifts", async () => {
+    const Filt = defineMetaobject("author", { name: "Author", fields: { name: m.text({ required: true, filterable: true }) } });
+    const { client, calls } = recordingClient();
+    const plan: DiffOp[] = [{ kind: "updateField", type: "$app:author", key: "name", changes: { filterable: true } }];
+    await push(client, plan, { definitions: [Filt.toDefinitionInput()], remote: [reconcileRemote] });
+
+    const definition = calls[0]?.variables?.definition as { fieldDefinitions: Array<{ update: { capabilities?: unknown } }> };
+    expect(definition.fieldDefinitions[0].update.capabilities).toEqual({ adminFilterable: { enabled: true } });
+  });
+});
+
 describe("referenceEdges", () => {
   it("collects single metaobject_definition_type targets", () => {
     const def: MetaobjectDefinitionInput = {

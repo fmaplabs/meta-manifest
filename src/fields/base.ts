@@ -6,6 +6,15 @@ export type DecodeResult<T> =
   | { value: T; issues?: undefined }
   | { value?: undefined; issues: Issue[] };
 
+/** Options every field builder accepts, regardless of type. */
+export interface CommonFieldOptions {
+  name?: string;
+  description?: string;
+  required?: boolean;
+  /** Expose this field as a filter in the admin (→ `capabilities.adminFilterable`). */
+  filterable?: boolean;
+}
+
 export abstract class Field<TOut, TIn = TOut, Req extends boolean = false> {
   abstract readonly shopifyType: string;
   /** True when Shopify stores this type as a JSON string (objects, lists). */
@@ -13,6 +22,15 @@ export abstract class Field<TOut, TIn = TOut, Req extends boolean = false> {
   required = false;
   name?: string;
   description?: string;
+  filterable = false;
+
+  /** Apply the shared field options; call from each concrete constructor. */
+  protected applyCommon(opts: CommonFieldOptions): void {
+    this.required = opts.required ?? false;
+    this.name = opts.name;
+    this.description = opts.description;
+    this.filterable = opts.filterable ?? false;
+  }
 
   // Phantom type carriers (no runtime value).
   declare readonly _out: TOut;

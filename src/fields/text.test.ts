@@ -28,4 +28,12 @@ describe("text", () => {
   it("multilineText uses the multi-line type", () => {
     expect(multilineText().shopifyType).toBe("multi_line_text_field");
   });
+
+  it("defaults filterable to false and accepts filterable: true", () => {
+    expect(text().filterable).toBe(false);
+    const f = text({ required: true, filterable: true });
+    expect(f.filterable).toBe(true);
+    expect(f.required).toBe(true);
+    expect(f.decode("hi")).toEqual({ value: "hi" });
+  });
 });

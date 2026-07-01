@@ -8,16 +8,27 @@ export type { Infer, InferInput } from "./infer";
 export interface AccessConfig {
   admin?: "merchant_read" | "merchant_read_write";
   storefront?: "public_read" | "none";
+  customerAccount?: "none" | "read";
+}
+/** SEO metadata: `true` enables with auto keys; an object maps field keys as title/description. */
+export type RenderableConfig = boolean | { metaTitleKey?: string; metaDescriptionKey?: string };
+/** Publish entries as Online Store web pages. `urlHandle` is required by Shopify. */
+export interface OnlineStoreConfig {
+  urlHandle: string;
+  createRedirects?: boolean;
 }
 export interface CapabilitiesConfig {
   publishable?: boolean;
   translatable?: boolean;
-  renderable?: boolean;
+  renderable?: RenderableConfig;
+  onlineStore?: OnlineStoreConfig;
 }
 export interface MetaobjectConfig<F> {
   name: string;
   description?: string;
   displayName?: keyof F & string;
+  /** Override the global config scope for this metaobject. */
+  scope?: "app" | "merchant";
   access?: AccessConfig;
   capabilities?: CapabilitiesConfig;
   fields: F;

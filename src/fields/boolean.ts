@@ -1,8 +1,6 @@
-import { Field, type DecodeResult, type FieldValidation } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation } from "./base";
 
-export interface BooleanOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+export interface BooleanOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
 }
 
@@ -10,9 +8,7 @@ class BooleanField<R extends boolean> extends Field<boolean, boolean, R> {
   readonly shopifyType = "boolean";
   constructor(opts: BooleanOptions<R>) {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   validations(): FieldValidation[] {
     return [];

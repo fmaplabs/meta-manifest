@@ -116,6 +116,21 @@ const types = [Material.type, Product.type]; // ["$app:material", "$app:product_
 const remote = await pull(client, types); // PulledRemote[]  (missing types absent)
 ```
 
+### App vs. merchant scope
+
+`Author.type` is always the canonical `$app:author`. Whether a definition is
+**app-scoped** (`$app:<handle>`) or **merchant-scoped** (bare `<handle>`) is
+resolved at sync time from `config.scope` (default `"app"`) and any per-metaobject
+`scope` override. The CLI resolves this for you; when wiring sync yourself, run
+schemas through `resolveDefinitions(schemas, config)` to get the effective
+`MetaobjectDefinitionInput[]` (definition `type` and reference targets rewritten
+to each metaobject's effective scope), then pull/diff/push those.
+
+> `type` is immutable, so changing a definition's scope after it's created makes
+> `pull` look under the new type and orphan the old definition (`mm diff`/`push`
+> warn when they detect this). Migrating scope is manual — recreate the entries
+> under the new type.
+
 ---
 
 ## 4. Diff
@@ -136,16 +151,38 @@ const plan = diff(local, remote.map((r) => normalizeRemote(r.definition)));
 
 The plan is a list of `DiffOp`s:
 
-| `kind`            | When                                          | Destructive? |
-| ----------------- | --------------------------------------------- | ------------ |
-| `createDefinition`| type doesn't exist remotely                   | no           |
-| `addField`        | local field missing remotely                  | no           |
-| `updateField`     | `required` or `validations` changed           | no           |
-| `changeFieldType` | field's `type` changed                        | **yes**      |
-| `removeField`     | remote field not in local schema              | **yes**      |
+| `kind`            | When                                                        | Destructive?      |
+| ----------------- | ----------------------------------------------------------- | ----------------- |
+| `createDefinition`| type doesn't exist remotely                                 | no                |
+| `updateDefinition`| `name`/`description`/`displayNameKey`/`access`/`capabilities` drifted | when it disables `onlineStore` |
+| `addField`        | local field missing remotely                                | no                |
+| `updateField`     | `required`, `validations`, or `filterable` changed          | no                |
+| `changeFieldType` | field's `type` changed                                      | **yes**           |
+| `removeField`     | remote field not in local schema                            | **yes**           |
 
 Destructive ops carry `destructive: true`. `diff` never talks to the store, so
 you can inspect, log, or gate on the plan before pushing anything.
+
+### Reconciling definition metadata (`updateDefinition`)
+
+Beyond fields, `diff` reconciles the definition's `name`, `description`,
+`displayNameKey`, `access` (`admin`/`storefront`/`customerAccount`), and
+`capabilities` (`publishable`/`translatable`/`renderable`/`onlineStore`). To keep
+existing definitions quiet, only what the local schema **declares** is compared:
+
+- A capability the schema doesn't mention is left as-is (not forced off). Write
+  `publishable: false` to actively disable one. `onlineStore` is the exception —
+  per Shopify it has no "off" object, so **omitting it disables** web-page
+  rendering (and that disable is gated destructive, since it removes live pages).
+- `renderable` SEO keys are compared only when you set them, so `renderable: true`
+  (Shopify auto-assigns the keys) doesn't churn against the assigned values.
+- `access.admin` is only meaningful on app-scoped types; it's compared only when
+  declared (or defaulted from `merchantEditable`), so merchant-scoped definitions
+  never drift on it.
+
+> `capabilities.onlineStore` is set via GraphQL only — it isn't expressible in
+> `shopify.app.toml`, so declaring it here is the way to publish entries as web
+> pages.
 
 ---
 
@@ -189,8 +226,9 @@ Note `skipped` does **not** make `ok` false — only `failed` and `blocked` do.
 
 ### Destructive ops are opt-in
 
-`removeField` and `changeFieldType` are skipped by default. Pass
-`{ allowDestructive: true }` to apply them:
+`removeField`, `changeFieldType`, and an `updateDefinition` that **disables
+`onlineStore`** are skipped by default. Pass `{ allowDestructive: true }` to
+apply them:
 
 ```ts
 await push(client, plan, { definitions, remote }, { allowDestructive: true });

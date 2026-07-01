@@ -1,8 +1,6 @@
-import { Field, type DecodeResult, type FieldValidation, type Issue } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation, type Issue } from "./base";
 
-export interface NumberOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+export interface NumberOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
   min?: number;
   max?: number;
@@ -14,9 +12,7 @@ export interface DecimalOptions<R extends boolean = false> extends NumberOptions
 abstract class NumericField<R extends boolean> extends Field<number, number, R> {
   constructor(protected readonly opts: NumberOptions<R>) {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   protected toJson(value: number): unknown {
     return value;
