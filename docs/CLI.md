@@ -89,12 +89,16 @@ export default defineConfig({
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   // apiVersion: "2026-07", // optional; defaults to the package's DEFAULT_API_VERSION
   schema: "./src/schema.ts", // where pull writes, and diff/push read
+  // scope: "app",           // optional; "app" (default) | "merchant" — applies to all metaobjects
+  // merchantEditable: false, // optional; default admin access for app-scoped metaobjects
 });
 ```
 
 Edit `shop` to point at your store. `shop`, `accessToken`, and `schema` are
 required — an empty or missing one aborts with
-`Invalid config: missing or empty "…"`.
+`Invalid config: missing or empty "…"`. `scope` and `merchantEditable` are
+optional store-wide defaults (each metaobject can override `scope` locally) — see
+the [configuration options table](../README.md#configuration-options).
 
 **`src/schema.ts`** — a starter definition. The key requirement: the module must
 export a `schemas` array. That array is what `diff` and `push` read.
@@ -114,9 +118,13 @@ export const schemas = [Author];
 ```
 
 `m` is the field builder namespace (`m.text`, `m.money`, `m.rating`, `m.ref`,
-`m.list`, …). For the full field catalog and the `defineMetaobject` options
-(`access`, `capabilities`, `displayName`, references), see the
-[README library section](../README.md#library-usage) and [`SYNC.md`](./SYNC.md).
+`m.list`, …). Beyond fields, `defineMetaobject` accepts `scope`, `displayName`,
+`access` (`admin`/`storefront`/`customerAccount`), and `capabilities`
+(`publishable`/`translatable`/`renderable`/`onlineStore`), and every field builder
+takes `filterable` — all reconciled by `diff`/`push`. For the full field catalog
+and the options table, see the
+[README library section](../README.md#library-usage) /
+[configuration options](../README.md#configuration-options) and [`SYNC.md`](./SYNC.md).
 
 ---
 
@@ -146,8 +154,10 @@ Wrote 3 definitions to ./src/schema.ts.
 
 `pull` **overwrites** the schema file. If one already exists you'll see a warning
 first (`Overwriting existing ./src/schema.ts.`); pass `--force` to suppress it in
-scripts. `pull` reads app-owned (`$app:`) definitions only. If the store has
-prettier installed, the generated source is formatted with it.
+scripts. `pull` reads app-owned (`$app:`) definitions only. The generated schema
+captures each definition's `displayName`, `access`, `capabilities`, and per-field
+`filterable`, so a follow-up `diff` round-trips cleanly. If the store has prettier
+installed, the generated source is formatted with it.
 
 After `pull`, treat `src/schema.ts` as your source of truth — edit it in code,
 then continue to `diff`/`push`. Re-running `pull` throws your local edits away, so
@@ -180,8 +190,15 @@ Everything is in sync — nothing to apply.
 
 Each line is `<kind>: <target>`, and destructive ops are tagged ` · destructive`
 (e.g. `removeField: $app:author.old_field · destructive`). The op kinds are
-`createDefinition`, `addField`, `updateField`, `changeFieldType` (destructive),
-and `removeField` (destructive) — see [`SYNC.md` §4](./SYNC.md#4-diff).
+`createDefinition`, `updateDefinition` (name/description/displayName/access/
+capabilities drift), `addField`, `updateField`, `changeFieldType` (destructive),
+and `removeField` (destructive) — see [`SYNC.md` §4](./SYNC.md#4-diff). An
+`updateDefinition` that **disables `onlineStore`** is also destructive (it removes
+live web pages).
+
+If a metaobject's `scope` changed since it was created, `diff`/`push` print a
+`Warning:` line — `type` is immutable, so the old definition is orphaned rather
+than migrated (see [`SYNC.md` §3](./SYNC.md#3-pull)).
 
 ---
 
@@ -189,8 +206,8 @@ and `removeField` (destructive) — see [`SYNC.md` §4](./SYNC.md#4-diff).
 
 `push` computes the same plan and applies it. Creates are **topologically
 ordered** (a referenced type is created before the type that references it), and
-**destructive ops are gated** — `removeField` and `changeFieldType` are skipped
-unless you opt in.
+**destructive ops are gated** — `removeField`, `changeFieldType`, and an
+`updateDefinition` that disables `onlineStore` are skipped unless you opt in.
 
 ```bash
 npx mm push
@@ -220,9 +237,9 @@ To apply the destructive ops too:
 npx mm push --allow-destructive
 ```
 
-> ⚠️ `--allow-destructive` lets `push` remove fields and change field types on the
-> live store. Run `diff` first and read the ` · destructive` lines so you know
-> exactly what will be dropped.
+> ⚠️ `--allow-destructive` lets `push` remove fields, change field types, and
+> disable `onlineStore` (removing live web pages) on the store. Run `diff` first
+> and read the ` · destructive` lines so you know exactly what will be dropped.
 
 ---
 
@@ -239,7 +256,8 @@ reach for:
   npx mm push --config ./prod.config.ts --allow-destructive
   ```
 
-- `--allow-destructive` — apply `removeField` / `changeFieldType` on `push`.
+- `--allow-destructive` — apply `removeField` / `changeFieldType` / `onlineStore`
+  disable on `push`.
 - `--force` — skip the "overwriting" warning on `pull`.
 
 `mm --help` (or `-h`) prints usage and exits.
@@ -296,7 +314,8 @@ token (present but rejected), a wrong `shop`, or missing scopes. |
 | `push` exits `2` with `⚠ blocked` lines | Ops couldn't run — an unmet dependency or a reference cycle among created
 types. See [`SYNC.md` §5](./SYNC.md#5-push). |
 | `push` exits `2` with `✗ failed` lines | Shopify returned `userErrors` for that op (e.g. an invalid validation). The message is in the line. |
-| Destructive changes won't apply | Expected — pass `--allow-destructive`. |
+| Destructive changes won't apply | Expected — pass `--allow-destructive` (covers `removeField`, `changeFieldType`, and `onlineStore` disable). |
+| `Warning: "…" is merchant-scoped but an app-owned "$app:…" already exists` | You changed a definition's `scope` after it was created. `type` is immutable, so `push` creates a new merchant-owned definition and orphans the app-owned one; migrate entries manually ([`SYNC.md` §3](./SYNC.md#3-pull)). |
 | `pull` warns it's overwriting | Expected — it regenerates the file. Pass `--force` to silence, or commit first so you can diff the regeneration. |
 
 ---
