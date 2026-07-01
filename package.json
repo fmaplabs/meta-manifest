@@ -1,6 +1,6 @@
 {
   "name": "@fmaplabs/meta-manifest",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Zero-dependency, zod-style builder for Shopify metaobject definitions, plus a CLI (mm) that syncs them to a store via pull → diff → push.",
   "publishConfig": {
     "access": "public"
