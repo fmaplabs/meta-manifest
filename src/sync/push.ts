@@ -83,27 +83,51 @@ function fieldInputFor(
 }
 
 /**
- * The `$app:` types a definition references, read from each field's
- * `metaobject_definition_type` (single) and `metaobject_definition_types` (JSON
- * array) validations. These are the dependency edges for create ordering. [design §7]
+ * The `$app:` types a single field references, from its `metaobject_definition_type`
+ * (single) and `metaobject_definition_types` (JSON array) validations.
  */
-export function referenceEdges(def: MetaobjectDefinitionInput): string[] {
+function fieldRefTargets(field: FieldDefinitionInput): string[] {
   const out: string[] = [];
-  for (const field of def.fieldDefinitions) {
-    for (const v of field.validations) {
-      if (v.name === "metaobject_definition_type") {
-        out.push(v.value);
-      } else if (v.name === "metaobject_definition_types") {
-        try {
-          const parsed: unknown = JSON.parse(v.value);
-          if (Array.isArray(parsed)) for (const t of parsed) if (typeof t === "string") out.push(t);
-        } catch {
-          // Ignore a malformed validation value rather than failing the push.
-        }
+  for (const v of field.validations) {
+    if (v.name === "metaobject_definition_type") {
+      out.push(v.value);
+    } else if (v.name === "metaobject_definition_types") {
+      try {
+        const parsed: unknown = JSON.parse(v.value);
+        if (Array.isArray(parsed)) for (const t of parsed) if (typeof t === "string") out.push(t);
+      } catch {
+        // Ignore a malformed validation value rather than failing the push.
       }
     }
   }
   return out;
+}
+
+/**
+ * The `$app:` types a definition references across all its fields. These are the
+ * dependency edges for create ordering. [design §7]
+ */
+export function referenceEdges(def: MetaobjectDefinitionInput): string[] {
+  return def.fieldDefinitions.flatMap(fieldRefTargets);
+}
+
+/**
+ * Split a cyclic definition's fields for two-pass creation: `deferred` fields
+ * reference another type *in the cycle* (whose target doesn't exist yet at create
+ * time) and are added by a follow-up update; `pass1` fields — scalars, refs to
+ * already-created types, and self-references — create with the definition. [design §7]
+ */
+function splitCyclicFields(
+  def: MetaobjectDefinitionInput,
+  cyclicTypes: Set<string>,
+): { pass1: FieldDefinitionInput[]; deferred: FieldDefinitionInput[] } {
+  const pass1: FieldDefinitionInput[] = [];
+  const deferred: FieldDefinitionInput[] = [];
+  for (const f of def.fieldDefinitions) {
+    const breaksCycle = fieldRefTargets(f).some((t) => cyclicTypes.has(t) && t !== def.type);
+    (breaksCycle ? deferred : pass1).push(f);
+  }
+  return { pass1, deferred };
 }
 
 /**
@@ -147,8 +171,10 @@ function topoSortCreates(types: Set<string>, deps: Map<string, Set<string>>): { 
  * thrown); only transport / top-level GraphQL errors propagate. [design §7, §8]
  *
  * Create ops run in dependency order (a referenced type before its referencer);
- * types in a reference cycle are `blocked`. Results are returned in plan order;
- * client calls happen in execution order. [design §7]
+ * types entangled in a reference cycle are created two-pass — created with the
+ * cycle-breaking ref fields stripped, then updated to add them once every member
+ * exists. Results are returned in plan order; client calls happen in execution
+ * order. [design §7]
  */
 export async function push(
   client: AdminGraphQLClient,
@@ -176,46 +202,43 @@ export async function push(
   }
 
   const { ordered, unordered } = topoSortCreates(createTypes, deps);
-  const orderedSet = new Set(ordered);
   const cyclicTypes = new Set(unordered);
   const createByType = new Map(createOps.map((x) => [x.op.type, x]));
-  const execOrder = [
-    ...ordered.map((t) => createByType.get(t) as { op: DiffOp; index: number }),
-    ...createOps.filter((x) => !orderedSet.has(x.op.type)),
-    ...otherOps,
-  ];
 
   // Types whose create this run failed or was blocked — their dependents block too.
   const failedTypes = new Set<string>();
 
-  async function applyOp(op: DiffOp): Promise<PushOpResult> {
-    if (op.kind === "createDefinition") {
-      if (cyclicTypes.has(op.type)) {
-        failedTypes.add(op.type);
-        return { op, status: "blocked", reason: "reference cycle — two-pass create deferred" };
-      }
-      for (const dep of deps.get(op.type) ?? []) {
-        if (failedTypes.has(dep)) {
-          failedTypes.add(op.type);
-          return { op, status: "blocked", reason: `blocked: dependency "${dep}" was not created` };
-        }
-      }
-      const def = defByType.get(op.type);
-      if (!def) {
-        failedTypes.add(op.type);
-        return { op, status: "blocked", reason: `no definition input for "${op.type}"` };
-      }
-      const data = await execute<{ metaobjectDefinitionCreate: MutationPayload }>(client, CREATE_DEFINITION_MUTATION, { definition: def });
-      const payload = data.metaobjectDefinitionCreate;
-      if (payload.userErrors.length) {
-        failedTypes.add(op.type);
-        return { op, status: "failed", userErrors: payload.userErrors };
-      }
-      const id = payload.metaobjectDefinition?.id;
-      if (id) idByType.set(op.type, id);
-      return { op, status: "applied", id };
+  /** Run a `metaobjectDefinitionCreate` for `definition`, recording the new id or failure. */
+  async function createDefinition(op: DiffOp, definition: MetaobjectDefinitionInput): Promise<PushOpResult> {
+    const data = await execute<{ metaobjectDefinitionCreate: MutationPayload }>(client, CREATE_DEFINITION_MUTATION, { definition });
+    const payload = data.metaobjectDefinitionCreate;
+    if (payload.userErrors.length) {
+      failedTypes.add(op.type);
+      return { op, status: "failed", userErrors: payload.userErrors };
     }
+    const id = payload.metaobjectDefinition?.id;
+    if (id) idByType.set(op.type, id);
+    return { op, status: "applied", id };
+  }
 
+  /** Create an acyclic definition (full field set), blocking on a failed dependency. */
+  async function applyAcyclicCreate(op: DiffOp): Promise<PushOpResult> {
+    for (const dep of deps.get(op.type) ?? []) {
+      if (failedTypes.has(dep)) {
+        failedTypes.add(op.type);
+        return { op, status: "blocked", reason: `blocked: dependency "${dep}" was not created` };
+      }
+    }
+    const def = defByType.get(op.type);
+    if (!def) {
+      failedTypes.add(op.type);
+      return { op, status: "blocked", reason: `no definition input for "${op.type}"` };
+    }
+    return createDefinition(op, def);
+  }
+
+  /** Apply a non-create op (field add/update/remove, definition update). [design §7, §8] */
+  async function applyFieldOp(op: DiffOp): Promise<PushOpResult> {
     const destructive = "destructive" in op && op.destructive === true;
     if (destructive && !allowDestructive) return { op, status: "skipped", reason: "destructive" };
 
@@ -276,10 +299,67 @@ export async function push(
     }
   }
 
-  // Execute in dependency order; record each result at its original plan index so
-  // the returned `results` align with the caller's plan. [design §7]
+  // Record each result at its original plan index so `results` aligns with the caller's plan.
   const results: PushOpResult[] = new Array(plan.length);
-  for (const { op, index } of execOrder) results[index] = await applyOp(op);
+
+  // Phase A: acyclic creates, dependency-first (a referenced type before its referencer).
+  for (const type of ordered) {
+    const entry = createByType.get(type) as { op: DiffOp; index: number };
+    results[entry.index] = await applyAcyclicCreate(entry.op);
+  }
+
+  // Cyclic definitions can't be ordered: create each with the cycle-breaking ref fields
+  // stripped (pass 1), then add those fields once every member exists (pass 2). [design §7]
+  const cyclicCreates = createOps.filter((x) => cyclicTypes.has(x.op.type));
+  const deferredByType = new Map<string, FieldDefinitionInput[]>();
+
+  // Phase B: pass-1 reduced creates.
+  for (const { op, index } of cyclicCreates) {
+    const def = defByType.get(op.type);
+    if (!def) {
+      failedTypes.add(op.type);
+      results[index] = { op, status: "blocked", reason: `no definition input for "${op.type}"` };
+      continue;
+    }
+    // A non-cyclic dependency lives in the pass-1 field set, so its failure blocks the create.
+    const failedDep = [...(deps.get(op.type) ?? [])].find((d) => !cyclicTypes.has(d) && failedTypes.has(d));
+    if (failedDep) {
+      failedTypes.add(op.type);
+      results[index] = { op, status: "blocked", reason: `blocked: dependency "${failedDep}" was not created` };
+      continue;
+    }
+    const { pass1, deferred } = splitCyclicFields(def, cyclicTypes);
+    deferredByType.set(op.type, deferred);
+    results[index] = await createDefinition(op, { ...def, fieldDefinitions: pass1 });
+  }
+
+  // Phase C: pass-2 — add the deferred ref fields now that every cyclic member exists.
+  for (const { op, index } of cyclicCreates) {
+    if (results[index]?.status !== "applied") continue;
+    const deferred = deferredByType.get(op.type) ?? [];
+    if (!deferred.length) continue;
+    const failedTarget = deferred.flatMap(fieldRefTargets).find((t) => failedTypes.has(t));
+    if (failedTarget) {
+      failedTypes.add(op.type);
+      results[index] = { op, status: "blocked", reason: `blocked: dependency "${failedTarget}" was not created` };
+      continue;
+    }
+    const id = idByType.get(op.type);
+    if (id == null) {
+      results[index] = { op, status: "blocked", reason: `no definition id for "${op.type}"` };
+      continue;
+    }
+    const definition: { fieldDefinitions: FieldOpInput[] } = { fieldDefinitions: deferred.map((f) => ({ create: f })) };
+    const data = await execute<{ metaobjectDefinitionUpdate: MutationPayload }>(client, UPDATE_DEFINITION_MUTATION, { id, definition });
+    const payload = data.metaobjectDefinitionUpdate;
+    if (payload.userErrors.length) {
+      failedTypes.add(op.type);
+      results[index] = { op, status: "failed", userErrors: payload.userErrors };
+    }
+  }
+
+  // Phase D: all other ops last — they may add fields/refs targeting a type created above.
+  for (const { op, index } of otherOps) results[index] = await applyFieldOp(op);
 
   const counts = { applied: 0, skipped: 0, blocked: 0, failed: 0 };
   for (const r of results) counts[r.status]++;

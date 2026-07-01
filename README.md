@@ -45,17 +45,29 @@ Author.parse(fields);        // Shopify {key, jsonValue}[] -> typed, validated
 Author.encode({ name: "Ursula" }); // typed -> [{ key, value }] for metaobjectUpsert
 ```
 
-References between metaobjects are declared with `m.ref(...)` / `m.list(m.ref(...))`:
+References between metaobjects are declared with `m.ref(...)` / `m.list(m.ref(...))`.
+Use `m.mixedRef([...])` (and `m.list(m.mixedRef([...]))`) for a field that may point at
+**several** metaobject types:
 
 ```ts
 export const Book = defineMetaobject("book", {
   name: "Book",
   fields: {
     title: m.text({ required: true }),
-    author: m.ref(Author),
+    author: m.ref(Author),                        // → one Author
+    related: m.list(m.ref(Author)),               // → many Authors
+    feature: m.mixedRef([Author, Publisher]),     // → one Author *or* Publisher
   },
 });
 ```
+
+`m.ref` maps to Shopify's `metaobject_reference` (a `metaobject_definition_type`
+validation); `m.mixedRef` maps to `mixed_reference` (a `metaobject_definition_types`
+validation). Targets are referenced by type, so `push` orders creates so a referenced
+definition exists first — and a **reference cycle** is created two-pass (the
+cycle-breaking fields are added by a follow-up update once every member exists).
+Pass a thunk (`m.ref(() => Book)`, `m.mixedRef([() => Book])`) for forward/circular
+references.
 
 ### Configuration options
 

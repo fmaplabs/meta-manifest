@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { collection, file, product, ref } from "./reference";
+import { list } from "./list";
+import { collection, file, mixedRef, product, ref } from "./reference";
 
 describe("reference codecs", () => {
   it("product reference round-trips a GID", () => {
@@ -28,5 +29,34 @@ describe("reference codecs", () => {
   it("ref accepts a thunk for circular references", () => {
     const f = ref(() => ({ type: "$app:book" }));
     expect(f.validations()).toEqual([{ name: "metaobject_definition_type", value: "$app:book" }]);
+  });
+
+  it("mixedRef pins several targets via metaobject_definition_types", () => {
+    const f = mixedRef([{ type: "$app:author" }, { type: "$app:publisher" }]);
+    expect(f.shopifyType).toBe("mixed_reference");
+    expect(f.validations()).toEqual([
+      { name: "metaobject_definition_types", value: JSON.stringify(["$app:author", "$app:publisher"]) },
+    ]);
+  });
+
+  it("mixedRef accepts thunks per target for circular references", () => {
+    const f = mixedRef([() => ({ type: "$app:a" }), () => ({ type: "$app:b" })]);
+    expect(f.validations()).toEqual([
+      { name: "metaobject_definition_types", value: JSON.stringify(["$app:a", "$app:b"]) },
+    ]);
+  });
+
+  it("mixedRef round-trips a metaobject GID", () => {
+    const f = mixedRef([{ type: "$app:author" }]);
+    expect(f.decode("gid://shopify/Metaobject/1")).toEqual({ value: "gid://shopify/Metaobject/1" });
+    expect(f.encode("gid://shopify/Metaobject/1")).toBe("gid://shopify/Metaobject/1");
+  });
+
+  it("list(mixedRef) becomes list.mixed_reference and preserves the types validation", () => {
+    const f = list(mixedRef([{ type: "$app:a" }, { type: "$app:b" }]));
+    expect(f.shopifyType).toBe("list.mixed_reference");
+    expect(f.validations()).toEqual([
+      { name: "metaobject_definition_types", value: JSON.stringify(["$app:a", "$app:b"]) },
+    ]);
   });
 });

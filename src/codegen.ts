@@ -68,6 +68,32 @@ function refTarget(field: RemoteField): string | undefined {
   return undefined;
 }
 
+/** All reference targets from a mixed_reference field's `metaobject_definition_types` validation. */
+function refTargets(field: RemoteField): string[] {
+  const many = v(field.validations, "metaobject_definition_types");
+  if (many) {
+    try {
+      const arr = JSON.parse(many);
+      if (Array.isArray(arr)) return arr.map(String);
+    } catch {
+      /* fall through */
+    }
+  }
+  const single = v(field.validations, "metaobject_definition_type");
+  return single ? [single] : [];
+}
+
+/** `[() => Author, () => Publisher]` target-list literal, or undefined if any target is unmapped. */
+function mixedTargetsLiteral(field: RemoteField, typeToIdent: Map<string, string>, warnings: string[]): string | undefined {
+  const targets = refTargets(field);
+  const idents = targets.map((t) => typeToIdent.get(t));
+  if (!targets.length || idents.some((i) => !i)) {
+    warnings.push(`unresolved mixed reference on field "${field.key}"`);
+    return undefined;
+  }
+  return `[${idents.map((i) => `() => ${i}`).join(", ")}]`;
+}
+
 /** Build the options-object literal source (e.g. `{ required: true, max: 120 }`), or "". */
 function optsLiteral(entries: string[]): string {
   return entries.length ? `{ ${entries.join(", ")} }` : "";
@@ -145,6 +171,16 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
     return opts ? `m.ref(() => ${ident}, ${opts})` : `m.ref(() => ${ident})`;
   }
 
+  if (type === "mixed_reference") {
+    const arr = mixedTargetsLiteral(field, typeToIdent, warnings);
+    if (!arr) return `m.json() /* TODO: unmapped mixed reference */`;
+    const refEntries: string[] = [];
+    if (field.required) refEntries.push("required: true");
+    refEntries.push(...filterableEntry(field));
+    const opts = optsLiteral(refEntries);
+    return opts ? `m.mixedRef(${arr}, ${opts})` : `m.mixedRef(${arr})`;
+  }
+
   if (type.startsWith("list.")) {
     const inner = type.slice("list.".length);
     const listEntries: string[] = [];
@@ -164,6 +200,10 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
         return `m.json() /* TODO: unmapped list reference */`;
       }
       innerCall = `m.ref(() => ${ident})`;
+    } else if (inner === "mixed_reference") {
+      const arr = mixedTargetsLiteral(field, typeToIdent, warnings);
+      if (!arr) return `m.json() /* TODO: unmapped list mixed reference */`;
+      innerCall = `m.mixedRef(${arr})`;
     } else if (SIMPLE[inner]) {
       // Inner scalar validations (min/max/regex/…) live on the same field; reuse scalarEntries
       // but drop list.* names (already consumed above).
@@ -244,6 +284,8 @@ function referencedTypes(def: RemoteDefinition): Set<string> {
     if (f.type === "metaobject_reference" || f.type === "list.metaobject_reference") {
       const t = refTarget(f);
       if (t) out.add(t);
+    } else if (f.type === "mixed_reference" || f.type === "list.mixed_reference") {
+      for (const t of refTargets(f)) out.add(t);
     }
   }
   return out;

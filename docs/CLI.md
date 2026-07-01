@@ -227,8 +227,8 @@ The four op statuses:
 
 - **`✓ applied`** — the mutation ran and succeeded.
 - **`– skipped`** — a destructive op you didn't opt into.
-- **`⚠ blocked`** — couldn't run (an unmet dependency, or a reference cycle among
-  the types being created).
+- **`⚠ blocked`** — couldn't run (an unmet dependency — e.g. a referenced type
+  whose own create failed).
 - **`✗ failed`** — the mutation ran but Shopify returned errors.
 
 To apply the destructive ops too:
@@ -293,9 +293,10 @@ npx mm diff
 npx mm push
 ```
 
-Because a partial `push` exits `2`, CI catches it automatically — e.g. a
-reference cycle among newly-created definitions leaves `blocked` ops and a
-non-zero exit. Inspect the per-op lines in the log to see which. Keep
+Because a partial `push` exits `2`, CI catches it automatically — e.g. a failed
+create leaves its dependents `blocked` and a non-zero exit. (Reference cycles no
+longer block: they're created two-pass. See [`SYNC.md`](./SYNC.md#5-push).)
+Inspect the per-op lines in the log to see which. Keep
 `--allow-destructive` off in automated pushes unless the destructive change is
 intentional and reviewed.
 
@@ -311,8 +312,8 @@ intentional and reviewed.
 | `Schema module "…" must export a schemas array.` | `src/schema.ts` doesn't `export const schemas = [...]`. Add it. |
 | `Sync failed: Shopify rejected a request.` (exit 1) | The request reached Shopify and was refused — a bad or expired
 token (present but rejected), a wrong `shop`, or missing scopes. |
-| `push` exits `2` with `⚠ blocked` lines | Ops couldn't run — an unmet dependency or a reference cycle among created
-types. See [`SYNC.md` §5](./SYNC.md#5-push). |
+| `push` exits `2` with `⚠ blocked` lines | Ops couldn't run — an unmet dependency (e.g. a referenced type whose create
+failed). See [`SYNC.md` §5](./SYNC.md#5-push). |
 | `push` exits `2` with `✗ failed` lines | Shopify returned `userErrors` for that op (e.g. an invalid validation). The message is in the line. |
 | Destructive changes won't apply | Expected — pass `--allow-destructive` (covers `removeField`, `changeFieldType`, and `onlineStore` disable). |
 | `Warning: "…" is merchant-scoped but an app-owned "$app:…" already exists` | You changed a definition's `scope` after it was created. `type` is immutable, so `push` creates a new merchant-owned definition and orphans the app-owned one; migrate entries manually ([`SYNC.md` §3](./SYNC.md#3-pull)). |

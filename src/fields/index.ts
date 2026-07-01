@@ -4,7 +4,7 @@ import { dimension, volume, weight } from "./measurement";
 import { money } from "./money";
 import { decimal, integer } from "./number";
 import { rating } from "./rating";
-import { collection, file, page, product, ref, variant } from "./reference";
+import { collection, file, mixedRef, page, product, ref, variant } from "./reference";
 import { color, date, dateTime, json, url } from "./scalar";
 import { multilineText, text } from "./text";
 
@@ -30,6 +30,7 @@ export const m = {
   page,
   file,
   ref,
+  mixedRef,
   list,
 } as const;
 

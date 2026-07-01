@@ -55,6 +55,16 @@ class MetaobjectRefField<R extends boolean> extends GidField<R> {
   }
 }
 
+class MixedRefField<R extends boolean> extends GidField<R> {
+  readonly shopifyType = "mixed_reference";
+  constructor(private readonly targets: readonly TypeRef[], opts: RefOptions<R>) {
+    super(opts);
+  }
+  validations(): FieldValidation[] {
+    return [{ name: "metaobject_definition_types", value: JSON.stringify(this.targets.map(resolveType)) }];
+  }
+}
+
 export function product<R extends boolean = false>(opts: RefOptions<R> = {}) {
   return new SimpleRefField<R>(opts, "product_reference");
 }
@@ -72,4 +82,7 @@ export function file<R extends boolean = false>(opts: FileOptions<R> = {}) {
 }
 export function ref<R extends boolean = false>(target: TypeRef, opts: RefOptions<R> = {}) {
   return new MetaobjectRefField<R>(target, opts);
+}
+export function mixedRef<R extends boolean = false>(targets: readonly TypeRef[], opts: RefOptions<R> = {}) {
+  return new MixedRefField<R>(targets, opts);
 }

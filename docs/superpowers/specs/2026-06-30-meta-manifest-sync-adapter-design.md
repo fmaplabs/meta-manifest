@@ -208,9 +208,10 @@ the lossy `op` in the plan — the plan only selects *which* field and *which* o
   fields' validations: a `metaobject_definition_type` (or list `metaobject_definition_types`) value naming another
   `$app:` type in this run is a dependency. Acyclic graphs run in dependency order, **single pass, never emitting a
   forward reference** — correct regardless of the §11 open question about forward refs at create time.
-- **Cycles.** Detected cycles return their `createDefinition` ops as **`blocked`** (reason:
-  `"reference cycle — two-pass create deferred"`). The two-pass create-then-update strategy is an explicit deferral
-  (§10); the best-effort result model already carries `blocked`.
+- **Cycles.** *(Implemented — no longer deferred.)* Detected cycles are created **two-pass**: each definition is created
+  with its cycle-breaking reference fields stripped, then a follow-up `metaobjectDefinitionUpdate` adds those fields once
+  every member of the cycle exists. Non-create ops run in a final phase so they can target types created this run. A
+  cycle member whose create fails still leaves the deferred ref fields pointing at it `blocked`.
 - **Dependency-aware skipping.** If a `createDefinition` `failed` (or is `blocked`), every op targeting that type and its
   transitive dependents becomes `blocked` rather than being attempted.
 - **Missing GID.** An `addField`/`updateField`/`removeField`/`changeFieldType` whose type has no known GID and is not
@@ -251,7 +252,7 @@ The committed `RemoteDefinition` is intentionally lossy — it carries only
 
 ## 10. Out of scope (this spec)
 
-- **Two-pass cycle creation** (create-stripped-then-update for reference cycles) → `blocked` + deferred.
+- ~~**Two-pass cycle creation** (create-stripped-then-update for reference cycles)~~ → **now implemented** (see §"Ordering, cycles, and dependency-aware skipping").
 - **`metaobjectDefinitions` list-all / pagination** ("show the whole store") → deferred; `pull` is by-type only.
 - **Enriching `diff`/`normalize`** to detect metadata/field-rename changes (see §9) → named follow-up.
 - **Rate-limit / cost handling and idempotency keys** → unnecessary under the 32-definition app cap; the

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **`m.mixedRef([...])`** — a mixed-reference field that can point at several metaobject
+  types (Shopify's `mixed_reference`), plus `m.list(m.mixedRef([...]))` for the list form
+  (`list.mixed_reference`). Round-trips through `pull` codegen (emitted as lazy thunks) and
+  contributes create-ordering dependency edges like `m.ref`.
+- **Reference cycles are now created two-pass instead of `blocked`.** `push` creates each
+  definition in a reference cycle with its cycle-breaking ref fields stripped, then issues a
+  follow-up `metaobjectDefinitionUpdate` to add them once every member exists. Non-create
+  ops run last so they can target types created this run. A cycle member whose create fails
+  still leaves the ref fields pointing at it `blocked`.
+
 ## 0.1.0
 
 Pivot to a standalone npm package + `mm` CLI.

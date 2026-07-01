@@ -242,11 +242,11 @@ describe("push — ordering and dependency gating", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("blocks both members of a reference cycle and attempts neither", async () => {
+  it("creates a reference cycle via two-pass: reduced create, then adds the deferred ref fields", async () => {
     // Plain type-refs build the cycle without circular schema type-inference;
     // referenceEdges only reads the metaobject_definition_type validation value.
-    const A = defineMetaobject("a", { name: "A", fields: { b: m.ref({ type: "$app:b" }) } });
-    const B = defineMetaobject("b", { name: "B", fields: { a: m.ref({ type: "$app:a" }) } });
+    const A = defineMetaobject("a", { name: "A", fields: { name: m.text({ required: true }), b: m.ref({ type: "$app:b" }) } });
+    const B = defineMetaobject("b", { name: "B", fields: { name: m.text({ required: true }), a: m.ref({ type: "$app:a" }) } });
     const { client, calls } = recordingClient();
     const plan: DiffOp[] = [
       { kind: "createDefinition", type: "$app:a", definition: normalizeLocal(A) },
@@ -254,9 +254,64 @@ describe("push — ordering and dependency gating", () => {
     ];
     const result = await push(client, plan, { definitions: [A.toDefinitionInput(), B.toDefinitionInput()], remote: [] });
 
-    expect(calls).toEqual([]);
-    expect(result.results.map((r) => r.status)).toEqual(["blocked", "blocked"]);
-    for (const r of result.results) if (r.status === "blocked") expect(r.reason).toContain("cycle");
+    expect(result.results.map((r) => r.status)).toEqual(["applied", "applied"]);
+    expect(result.counts).toEqual({ applied: 2, skipped: 0, blocked: 0, failed: 0 });
+    expect(result.ok).toBe(true);
+
+    const creates = calls.filter((c) => c.query === CREATE_DEFINITION_MUTATION);
+    const updates = calls.filter((c) => c.query === UPDATE_DEFINITION_MUTATION);
+    // Pass 1: both created with the cycle-breaking ref field stripped (only `name` remains).
+    expect(creates.map((c) => (c.variables?.definition as MetaobjectDefinitionInput).type)).toEqual(["$app:a", "$app:b"]);
+    for (const c of creates) {
+      const keys = (c.variables?.definition as MetaobjectDefinitionInput).fieldDefinitions.map((f) => f.key);
+      expect(keys).toEqual(["name"]);
+    }
+    // Pass 2: each definition updated to add exactly its deferred reference field.
+    expect(updates).toHaveLength(2);
+    for (const c of updates) {
+      const fds = (c.variables?.definition as { fieldDefinitions: Array<{ create: { type: string } }> }).fieldDefinitions;
+      expect(fds).toHaveLength(1);
+      expect(fds[0].create.type).toBe("metaobject_reference");
+    }
+  });
+
+  it("blocks a cyclic definition's deferred ref field when its target failed to create", async () => {
+    const A = defineMetaobject("a", { name: "A", fields: { name: m.text({ required: true }), b: m.ref({ type: "$app:b" }) } });
+    const B = defineMetaobject("b", { name: "B", fields: { name: m.text({ required: true }), a: m.ref({ type: "$app:a" }) } });
+    // Fail only A's create; B creates fine, but its deferred ref → A can't be added.
+    const calls: Call[] = [];
+    const client: AdminGraphQLClient = async (query, options) => {
+      calls.push({ query, variables: options?.variables });
+      if (query === CREATE_DEFINITION_MUTATION) {
+        const type = (options?.variables?.definition as MetaobjectDefinitionInput).type;
+        const failed = type === "$app:a";
+        return {
+          data: {
+            metaobjectDefinitionCreate: {
+              metaobjectDefinition: failed ? null : { id: `gid://shopify/MetaobjectDefinition/${type}`, type },
+              userErrors: failed ? [{ message: "boom" }] : [],
+            },
+          },
+        };
+      }
+      if (query === UPDATE_DEFINITION_MUTATION) {
+        return { data: { metaobjectDefinitionUpdate: { metaobjectDefinition: { id: options?.variables?.id as string, type: "x" }, userErrors: [] } } };
+      }
+      return { data: {} };
+    };
+    const plan: DiffOp[] = [
+      { kind: "createDefinition", type: "$app:a", definition: normalizeLocal(A) },
+      { kind: "createDefinition", type: "$app:b", definition: normalizeLocal(B) },
+    ];
+    const result = await push(client, plan, { definitions: [A.toDefinitionInput(), B.toDefinitionInput()], remote: [] });
+
+    const a = result.results.find((r) => r.op.type === "$app:a");
+    const b = result.results.find((r) => r.op.type === "$app:b");
+    expect(a?.status).toBe("failed");
+    expect(b?.status).toBe("blocked");
+    if (b?.status === "blocked") expect(b.reason).toContain("$app:a");
+    // No pass-2 update fired (B's deferred ref target failed).
+    expect(calls.some((c) => c.query === UPDATE_DEFINITION_MUTATION)).toBe(false);
     expect(result.ok).toBe(false);
   });
 });

@@ -218,8 +218,8 @@ Each op ends in one of four statuses:
 
 - **`applied`** — the mutation ran and succeeded (`id` included).
 - **`skipped`** — a destructive op you didn't opt into (`reason: "destructive"`).
-- **`blocked`** — couldn't run: a dependency wasn't created, a reference cycle,
-  or no GID/definition available.
+- **`blocked`** — couldn't run: a dependency wasn't created (its create failed or
+  was itself blocked), or no GID/definition available.
 - **`failed`** — the mutation ran but Shopify returned `userErrors`.
 
 Note `skipped` does **not** make `ok` false — only `failed` and `blocked` do.
@@ -238,10 +238,18 @@ await push(client, plan, { definitions, remote }, { allowDestructive: true });
 
 `createDefinition` ops run in dependency order: a referenced type is created
 before the type that references it (edges are read from each field's
-`metaobject_definition_type` validation). Types entangled in a reference **cycle**
-can't be ordered and come back `blocked` (`reason: "reference cycle …"`); a
-type whose dependency failed or was blocked is `blocked` too. Field-level ops on
-a definition that wasn't created this run are also `blocked`.
+`metaobject_definition_type` / `metaobject_definition_types` validations). Types
+entangled in a reference **cycle** can't be ordered, so they're created **two-pass**:
+each is created first with its cycle-breaking reference fields stripped, then a
+follow-up `metaobjectDefinitionUpdate` adds those fields once every member of the
+cycle exists. A type whose dependency failed or was blocked is `blocked` (and if a
+cycle member's create fails, the deferred ref fields pointing at it are `blocked`).
+Field-level ops on a definition that wasn't created this run are also `blocked`.
+
+> A cycle member whose fields are *all* cycle-breaking references has an empty
+> pass-1 field set, which Shopify rejects (a definition needs at least one field);
+> it surfaces as a `failed` create. Give such a definition at least one non-reference
+> field so the two-pass create has something to create first.
 
 ---
 
@@ -319,9 +327,9 @@ pull → diff → push end-to-end against a fake, in-file `AdminGraphQLClient` (
 empty store, asserting referenced-type-first create ordering).
 [`../src/sync/push.test.ts`](../src/sync/push.test.ts) covers the rest of the
 scenarios described above against the same kind of fake client — destructive
-ops skipped by default and applied under `allowDestructive: true`, `blocked`
-ops from missing dependencies/reference cycles, `failed` ops from
-`userErrors`, and the `counts`/`ok` aggregation. Both use a hand-written fake
+ops skipped by default and applied under `allowDestructive: true`, two-pass
+creation of reference cycles (and `blocked` ops from missing dependencies),
+`failed` ops from `userErrors`, and the `counts`/`ok` aggregation. Both use a hand-written fake
 client (keyed on the query/mutation constants exported from
 [`../src/sync/client.ts`](../src/sync/client.ts)) instead of a real store, so
 they run fully offline. In a real app, that fake is the only thing you'd

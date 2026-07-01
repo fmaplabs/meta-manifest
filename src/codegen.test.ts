@@ -44,6 +44,17 @@ const NodeB = defineMetaobject("node_b", {
   fields: { sibling: m.ref((): { type: string } => NodeA) },
 });
 
+// A mixed_reference target set: Content.block can point at either Author or Publisher.
+const Author = defineMetaobject("author", { name: "Author", fields: { name: m.text({ required: true }) } });
+const Publisher = defineMetaobject("publisher", { name: "Publisher", fields: { name: m.text({ required: true }) } });
+const Content = defineMetaobject("content", {
+  name: "Content",
+  fields: {
+    block: m.mixedRef([Author, Publisher]),
+    blocks: m.list(m.mixedRef([Author, Publisher])),
+  },
+});
+
 describe("generateSchemaSource", () => {
   it("round-trips: generated source re-normalizes to an empty diff", async () => {
     const local: RemoteDefinition[] = [normalizeLocal(Material), normalizeLocal(Product)];
@@ -157,6 +168,27 @@ describe("generateSchemaSource", () => {
     const source = generateSchemaSource([merchantDef, appDef]);
     expect(source).toContain('defineMetaobject("author", {\n  scope: "merchant",');
     expect(source.slice(source.indexOf("const Tag"))).not.toContain("scope:");
+  });
+
+  it("round-trips mixed_reference and list.mixed_reference via m.mixedRef with lazy thunks", async () => {
+    const local: RemoteDefinition[] = [normalizeLocal(Author), normalizeLocal(Publisher), normalizeLocal(Content)];
+    const source = generateSchemaSource(local);
+    expect(source).toContain("m.mixedRef([() => Author, () => Publisher])");
+    expect(source).toContain("m.list(m.mixedRef([() => Author, () => Publisher]))");
+    // Targets must be emitted before the referencer so the thunks resolve.
+    expect(source.indexOf("const Author")).toBeLessThan(source.indexOf("const Content"));
+    expect(source.indexOf("const Publisher")).toBeLessThan(source.indexOf("const Content"));
+
+    const dir = mkdtempSync(join(tmpdir(), "mm-codegen-mixed-"));
+    const file = join(dir, "schema.ts");
+    writeFileSync(file, source.replace('from "@fmaplabs/meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+
+    const jiti = createJiti(import.meta.url);
+    const mod = await jiti.import<{ schemas: AnySchema[] }>(file);
+    const regenerated = mod.schemas.map(normalizeLocal);
+
+    const plan = diff(regenerated, local);
+    expect(plan).toEqual([]);
   });
 
   it("emits lazy thunks for a two-node reference cycle (NodeA <-> NodeB), so the generated source loads without a TDZ ReferenceError", async () => {
