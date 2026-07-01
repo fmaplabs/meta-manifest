@@ -1,6 +1,7 @@
 import type { MetaobjectSchema } from "../define";
 import type { FieldMap } from "../infer";
 import type { FieldValidation } from "../fields/base";
+import type { MetaobjectDefinitionInput } from "../definition-input";
 
 export interface RemoteField {
   key: string;
@@ -14,8 +15,8 @@ export interface RemoteDefinition {
   fields: RemoteField[];
 }
 
-export function normalizeLocal<F extends FieldMap>(schema: MetaobjectSchema<F>): RemoteDefinition {
-  const def = schema.toDefinitionInput();
+/** Normalize a (already scope-resolved) definition input to the diff shape. */
+export function normalizeDefinition(def: MetaobjectDefinitionInput): RemoteDefinition {
   return {
     type: def.type,
     name: def.name,
@@ -26,6 +27,10 @@ export function normalizeLocal<F extends FieldMap>(schema: MetaobjectSchema<F>):
       validations: f.validations,
     })),
   };
+}
+
+export function normalizeLocal<F extends FieldMap>(schema: MetaobjectSchema<F>): RemoteDefinition {
+  return normalizeDefinition(schema.toDefinitionInput());
 }
 
 export interface PulledFieldDefinition {

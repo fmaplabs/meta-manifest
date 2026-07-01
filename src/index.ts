@@ -24,8 +24,10 @@ export type { MetaobjectDefinitionInput, FieldDefinitionInput } from "./definiti
 
 export { diff } from "./sync/diff";
 export type { DiffOp } from "./sync/diff";
-export { normalizeLocal, normalizeRemote } from "./sync/normalize";
+export { normalizeLocal, normalizeDefinition, normalizeRemote } from "./sync/normalize";
 export type { RemoteDefinition, RemoteField } from "./sync/normalize";
+export { resolveDefinitions } from "./sync/resolve";
+export type { ScopeConfig, Scope } from "./sync/resolve";
 
 export { pull, pullAll } from "./sync/pull";
 export type { PulledRemote } from "./sync/pull";
