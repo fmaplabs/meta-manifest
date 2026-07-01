@@ -1,8 +1,6 @@
-import { Field, type DecodeResult, type FieldValidation, type Issue } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation, type Issue } from "./base";
 
-export interface TextOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+export interface TextOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
   min?: number;
   max?: number;
@@ -16,9 +14,7 @@ class TextField<R extends boolean> extends Field<string, string, R> {
   constructor(private readonly opts: TextOptions<R>, multiline: boolean) {
     super();
     this.shopifyType = multiline ? "multi_line_text_field" : "single_line_text_field";
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   validations(): FieldValidation[] {
     const v: FieldValidation[] = [];

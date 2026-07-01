@@ -1,12 +1,10 @@
-import { Field, type DecodeResult, type FieldValidation } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation } from "./base";
 
 export interface Money {
   amount: string;
   currencyCode: string;
 }
-interface MoneyOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+interface MoneyOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
 }
 
@@ -15,9 +13,7 @@ class MoneyField<R extends boolean> extends Field<Money, Money, R> {
   protected override readonly wireIsJson = true;
   constructor(opts: MoneyOptions<R>) {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   validations(): FieldValidation[] {
     return [];

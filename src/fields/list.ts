@@ -1,11 +1,9 @@
-import { Field, type DecodeResult, type FieldValidation, type Issue } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation, type Issue } from "./base";
 
 type InnerOut<E> = E extends Field<infer O, any, any> ? O : never;
 type InnerIn<E> = E extends Field<any, infer I, any> ? I : never;
 
-export interface ListOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+export interface ListOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
   min?: number;
   max?: number;
@@ -17,9 +15,7 @@ class ListField<E extends Field<any, any, any>, R extends boolean> extends Field
   constructor(private readonly inner: E, private readonly o: ListOptions<R>) {
     super();
     this.shopifyType = `list.${inner.shopifyType}`;
-    this.required = o.required ?? false;
-    this.name = o.name;
-    this.description = o.description;
+    this.applyCommon(o);
   }
   validations(): FieldValidation[] {
     const v = [...this.inner.validations()];

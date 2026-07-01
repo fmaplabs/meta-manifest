@@ -1,17 +1,13 @@
-import { Field, type DecodeResult, type FieldValidation, type Issue } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation, type Issue } from "./base";
 
-interface BaseOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+interface BaseOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
 }
 
 abstract class StringScalarField<R extends boolean> extends Field<string, string, R> {
   constructor(opts: BaseOptions<R>) {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   protected toJson(value: string): unknown {
     return value;
@@ -68,9 +64,7 @@ class JsonField<R extends boolean> extends Field<unknown, unknown, R> {
   protected override readonly wireIsJson = true;
   constructor(opts: BaseOptions<R>) {
     super();
-    this.required = opts.required ?? false;
-    this.name = opts.name;
-    this.description = opts.description;
+    this.applyCommon(opts);
   }
   validations(): FieldValidation[] {
     return [];

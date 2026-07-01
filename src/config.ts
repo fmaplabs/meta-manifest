@@ -9,6 +9,10 @@ export interface Config {
   apiVersion?: string;
   /** Path to the schema module whose `schemas` export drives diff/push, and pull writes. */
   schema: string;
+  /** Scope for all metaobjects, unless overridden per-metaobject. Defaults to "app". */
+  scope?: "app" | "merchant";
+  /** Default admin access for app-scoped metaobjects: false → merchant_read, true → merchant_read_write. Defaults to false. */
+  merchantEditable?: boolean;
 }
 
 /** Identity helper for type inference in `meta-manifest.config.ts`. */

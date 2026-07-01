@@ -1,4 +1,4 @@
-import { Field, type DecodeResult, type FieldValidation, type Issue } from "./base";
+import { Field, type CommonFieldOptions, type DecodeResult, type FieldValidation, type Issue } from "./base";
 import type { StandardSchemaV1 } from "../standard-schema";
 
 export interface Rating {
@@ -9,9 +9,7 @@ export interface Rating {
 export interface RatingInput {
   value: number;
 }
-export interface RatingOptions<R extends boolean = false> {
-  name?: string;
-  description?: string;
+export interface RatingOptions<R extends boolean = false> extends CommonFieldOptions {
   required?: R;
   min: number;
   max: number;
@@ -22,9 +20,7 @@ class RatingField<R extends boolean> extends Field<Rating, RatingInput, R> {
   protected override readonly wireIsJson = true;
   constructor(private readonly o: RatingOptions<R>) {
     super();
-    this.required = o.required ?? false;
-    this.name = o.name;
-    this.description = o.description;
+    this.applyCommon(o);
   }
   validations(): FieldValidation[] {
     return [
