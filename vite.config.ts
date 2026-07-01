@@ -45,7 +45,9 @@ export default defineConfig({
     hmr: hmrConfig,
     fs: {
       // See https://vitejs.dev/config/server-options.html#server-fs-allow for more information
-      allow: ["app", "node_modules"],
+      // "packages" lets Vite serve the @meta-manifest/core workspace source (a symlink
+      // whose real path is packages/core, outside app/ and node_modules/).
+      allow: ["app", "node_modules", "packages"],
     },
   },
   plugins: [
