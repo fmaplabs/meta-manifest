@@ -13,9 +13,9 @@ fields) to a store via `pull` → `diff` → `push`.
 ## Install
 
 ```bash
-npm i -D @meta-manifest/core
+npm i -D @fmaplabs/meta-manifest
 # or
-pnpm add -D @meta-manifest/core
+pnpm add -D @fmaplabs/meta-manifest
 ```
 
 ## Library usage
@@ -24,7 +24,7 @@ Declare a metaobject with `defineMetaobject` and the `m` field builders. Impleme
 [Standard Schema](https://github.com/standard-schema/standard-schema).
 
 ```ts
-import { defineMetaobject, m, type Infer } from "@meta-manifest/core";
+import { defineMetaobject, m, type Infer } from "@fmaplabs/meta-manifest";
 
 export const Author = defineMetaobject("author", {
   name: "Author",
@@ -72,7 +72,7 @@ example output and CI usage), see the [CLI quick start & usage guide](./docs/CLI
 `meta-manifest.config.ts` (safe to commit — the token comes from the environment):
 
 ```ts
-import { defineConfig } from "@meta-manifest/core";
+import { defineConfig } from "@fmaplabs/meta-manifest";
 
 export default defineConfig({
   shop: "my-store.myshopify.com",

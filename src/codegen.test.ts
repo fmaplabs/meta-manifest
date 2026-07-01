@@ -52,7 +52,7 @@ describe("generateSchemaSource", () => {
     const dir = mkdtempSync(join(tmpdir(), "mm-codegen-"));
     const file = join(dir, "schema.ts");
     // Rewrite the package import to the built source under test.
-    writeFileSync(file, source.replace('from "@meta-manifest/core"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+    writeFileSync(file, source.replace('from "@fmaplabs/meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
 
     const jiti = createJiti(import.meta.url);
     const mod = await jiti.import<{ schemas: AnySchema[] }>(file);
@@ -83,7 +83,7 @@ describe("generateSchemaSource", () => {
     const dir = mkdtempSync(join(tmpdir(), "mm-codegen-date-"));
     const file = join(dir, "schema.ts");
     // Rewrite the package import to the built source under test.
-    writeFileSync(file, source.replace('from "@meta-manifest/core"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+    writeFileSync(file, source.replace('from "@fmaplabs/meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
 
     const jiti = createJiti(import.meta.url);
     const mod = await jiti.import<{ schemas: AnySchema[] }>(file);
@@ -102,7 +102,7 @@ describe("generateSchemaSource", () => {
 
     const dir = mkdtempSync(join(tmpdir(), "mm-codegen-selfref-"));
     const file = join(dir, "schema.ts");
-    writeFileSync(file, source.replace('from "@meta-manifest/core"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+    writeFileSync(file, source.replace('from "@fmaplabs/meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
 
     const jiti = createJiti(import.meta.url);
     const mod = await jiti.import<{ schemas: AnySchema[] }>(file);
@@ -120,7 +120,7 @@ describe("generateSchemaSource", () => {
 
     const dir = mkdtempSync(join(tmpdir(), "mm-codegen-cycle-"));
     const file = join(dir, "schema.ts");
-    writeFileSync(file, source.replace('from "@meta-manifest/core"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
+    writeFileSync(file, source.replace('from "@fmaplabs/meta-manifest"', `from ${JSON.stringify(join(process.cwd(), "src/index.ts"))}`));
 
     const jiti = createJiti(import.meta.url);
     const mod = await jiti.import<{ schemas: AnySchema[] }>(file);

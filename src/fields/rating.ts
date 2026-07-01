@@ -54,7 +54,7 @@ class RatingField<R extends boolean> extends Field<Rating, RatingInput, R> {
   override get ["~standard"](): StandardSchemaV1.Props<RatingInput, Rating> {
     return {
       version: 1,
-      vendor: "@meta-manifest/core",
+      vendor: "@fmaplabs/meta-manifest",
       validate: (input: unknown) => {
         if (
           typeof input !== "object" ||

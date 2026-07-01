@@ -17,9 +17,9 @@ sync model (how the plan is computed, dependency ordering, error channels), see
 Install into the project whose schema you want to sync:
 
 ```bash
-npm i -D @meta-manifest/core
+npm i -D @fmaplabs/meta-manifest
 # or
-pnpm add -D @meta-manifest/core
+pnpm add -D @fmaplabs/meta-manifest
 ```
 
 This puts both `mm` and `meta-manifest` on your `PATH` via `npx` / your package
@@ -74,7 +74,7 @@ Two files land in your project:
 **`meta-manifest.config.ts`** — safe to commit; the token comes from the environment:
 
 ```ts
-import { defineConfig } from "@meta-manifest/core";
+import { defineConfig } from "@fmaplabs/meta-manifest";
 
 export default defineConfig({
   shop: "my-store.myshopify.com",
@@ -92,7 +92,7 @@ required — an empty or missing one aborts with
 export a `schemas` array. That array is what `diff` and `push` read.
 
 ```ts
-import { defineMetaobject, m } from "@meta-manifest/core";
+import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
 
 export const Author = defineMetaobject("author", {
   name: "Author",

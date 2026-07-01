@@ -1,10 +1,16 @@
 {
-  "name": "@meta-manifest/core",
+  "name": "@fmaplabs/meta-manifest",
   "version": "0.1.0",
+  "description": "Zero-dependency, zod-style builder for Shopify metaobject definitions, plus a CLI (mm) that syncs them to a store via pull → diff → push.",
   "publishConfig": { "access": "public" },
   "type": "module",
   "engines": { "node": ">=20.19 <22 || >=22.12" },
   "author": "kyle",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/fmaplabs/meta-manifest.git" },
+  "homepage": "https://github.com/fmaplabs/meta-manifest#readme",
+  "bugs": "https://github.com/fmaplabs/meta-manifest/issues",
+  "keywords": ["shopify", "metaobject", "metaobjects", "metafields", "schema", "cli", "codegen", "admin-api"],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,7 +25,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "pnpm build",
+    "release": "pnpm test && pnpm typecheck && npm publish --access public",
+    "release:patch": "npm version patch && pnpm release && git push --follow-tags",
+    "release:minor": "npm version minor && pnpm release && git push --follow-tags",
+    "release:major": "npm version major && pnpm release && git push --follow-tags"
   },
   "dependencies": {
     "jiti": "^2.4.2"

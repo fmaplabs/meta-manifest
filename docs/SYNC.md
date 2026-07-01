@@ -35,7 +35,7 @@ The example below defines `Material` and `Product`, where `Product.specs` is a
 `list(ref(Material))` — a reference that makes `Product` depend on `Material`.
 
 ```ts
-import { defineMetaobject, m } from "@meta-manifest/core";
+import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
 
 export const Material = defineMetaobject("material", {
   name: "Material",
@@ -70,11 +70,11 @@ export interface AdminGraphQLClient {
 ```
 
 The package ships a ready-made standalone client for Node — `createAdminClient`
-from the `@meta-manifest/core/node` subpath export — which is what the CLI uses
+from the `@fmaplabs/meta-manifest/node` subpath export — which is what the CLI uses
 internally:
 
 ```ts
-import { createAdminClient } from "@meta-manifest/core/node";
+import { createAdminClient } from "@fmaplabs/meta-manifest/node";
 
 const client = createAdminClient({
   shop: "my-store.myshopify.com",
@@ -92,7 +92,7 @@ of using the CLI, adapt whatever GraphQL-executing function you already have to
 the same shape:
 
 ```ts
-import type { AdminGraphQLClient } from "@meta-manifest/core";
+import type { AdminGraphQLClient } from "@fmaplabs/meta-manifest";
 
 const client: AdminGraphQLClient = (query, options) =>
   myExistingAdminFetcher(query, options?.variables).then((response) => response.json());
@@ -110,7 +110,7 @@ a create for it). Each returned entry carries the definition's GID `id`, which
 `push` needs to update fields later.
 
 ```ts
-import { pull } from "@meta-manifest/core";
+import { pull } from "@fmaplabs/meta-manifest";
 
 const types = [Material.type, Product.type]; // ["$app:material", "$app:product_spec"]
 const remote = await pull(client, types); // PulledRemote[]  (missing types absent)
@@ -124,7 +124,7 @@ const remote = await pull(client, types); // PulledRemote[]  (missing types abse
 against **normalized** remote definitions and returns a plan.
 
 ```ts
-import { diff, normalizeLocal, normalizeRemote } from "@meta-manifest/core";
+import { diff, normalizeLocal, normalizeRemote } from "@fmaplabs/meta-manifest";
 
 // ⚠️ Normalize each schema individually. `schemas.map(normalizeLocal)` does NOT
 // typecheck: a heterogeneous array of schemas can't unify normalizeLocal's
@@ -159,7 +159,7 @@ you can inspect, log, or gate on the plan before pushing anything.
   field updates target.
 
 ```ts
-import { push } from "@meta-manifest/core";
+import { push } from "@fmaplabs/meta-manifest";
 
 const result = await push(client, plan, {
   definitions: [Material.toDefinitionInput(), Product.toDefinitionInput()],
@@ -218,7 +218,7 @@ Two failure channels, deliberately kept separate:
   `ok` becomes false. Inspect `result.results` to see which.
 
 ```ts
-import { SyncTransportError } from "@meta-manifest/core";
+import { SyncTransportError } from "@fmaplabs/meta-manifest";
 
 try {
   const result = await push(client, plan, { definitions, remote });
@@ -241,8 +241,8 @@ This is the same wiring `mm push` does under the hood, using the built-in
 Node client instead of a Shopify-app session:
 
 ```ts
-import { createAdminClient } from "@meta-manifest/core/node";
-import { diff, normalizeLocal, normalizeRemote, pull, push } from "@meta-manifest/core";
+import { createAdminClient } from "@fmaplabs/meta-manifest/node";
+import { diff, normalizeLocal, normalizeRemote, pull, push } from "@fmaplabs/meta-manifest";
 import { Material, Product, schemas } from "./schema"; // your defineMetaobject(...) file
 
 const client = createAdminClient({

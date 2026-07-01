@@ -226,7 +226,7 @@ export function generateSchemaSource(defs: RemoteDefinition[]): string {
   const warnings: string[] = [];
   const blocks = ordered.map((d) => defSource(d, typeToIdent, warnings));
   const idents = ordered.map((d) => typeToIdent.get(d.type)!);
-  const header = `import { defineMetaobject, m } from "@meta-manifest/core";`;
+  const header = `import { defineMetaobject, m } from "@fmaplabs/meta-manifest";`;
   const body = blocks.join("\n\n");
   const footer = `export const schemas = [${idents.join(", ")}];`;
   for (const w of warnings) console.warn(`[meta-manifest] codegen: ${w}`);

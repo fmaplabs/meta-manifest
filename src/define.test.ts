@@ -37,7 +37,7 @@ describe("defineMetaobject", () => {
   it("exposes an object-level Standard Schema interface", () => {
     const std = Author["~standard"];
     expect(std.version).toBe(1);
-    expect(std.vendor).toBe("@meta-manifest/core");
+    expect(std.vendor).toBe("@fmaplabs/meta-manifest");
     expect(std.validate([{ key: "name", jsonValue: "Ursula" }])).toEqual({ value: { name: "Ursula" } });
     expect(std.validate([])).toMatchObject({ issues: [{ path: ["name"] }] });
   });

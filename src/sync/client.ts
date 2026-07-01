@@ -1,7 +1,7 @@
 /**
  * The minimal Admin GraphQL transport the sync adapter depends on. The app
  * supplies a concrete implementation at its edge (wrapping `admin.graphql`),
- * keeping `@meta-manifest/core` free of any runtime dependency on a GraphQL
+ * keeping `@fmaplabs/meta-manifest` free of any runtime dependency on a GraphQL
  * client. [design §5]
  */
 export interface AdminGraphQLClient {

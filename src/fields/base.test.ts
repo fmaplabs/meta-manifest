@@ -35,7 +35,7 @@ describe("Field base", () => {
   it("exposes a Standard Schema interface", () => {
     const std = new UpperField()["~standard"];
     expect(std.version).toBe(1);
-    expect(std.vendor).toBe("@meta-manifest/core");
+    expect(std.vendor).toBe("@fmaplabs/meta-manifest");
     expect(std.validate("HELLO")).toEqual({ value: "HELLO" });
     expect(std.validate("hello")).toEqual({ issues: [{ message: "must be uppercase" }] });
   });

@@ -75,7 +75,7 @@ export abstract class Field<TOut, TIn = TOut, Req extends boolean = false> {
   get ["~standard"](): StandardSchemaV1.Props<TIn, TOut> {
     return {
       version: 1,
-      vendor: "@meta-manifest/core",
+      vendor: "@fmaplabs/meta-manifest",
       validate: (value: unknown) => {
         const issues = this.check(value as TOut);
         return issues.length ? { issues } : { value: value as TOut };
