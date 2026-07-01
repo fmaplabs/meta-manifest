@@ -279,10 +279,14 @@ intentional and reviewed.
 
 | Symptom | Cause / fix |
 | ------- | ----------- |
-| `Invalid config: missing or empty "shop"` (or `accessToken` / `schema`) | The config's required field is unset. Check `meta-manifest.config.ts` (or the `--config` file). Because the config reads the token via `process.env.SHOPIFY_ADMIN_TOKEN!`, **an unset token surfaces here as `accessToken`** — export it (step 2). |
+| `Invalid config: missing or empty "shop"` (or `accessToken` / `schema`) | The config's required field is unset. Check
+`meta-manifest.config.ts` (or the `--config` file). Because the config reads the token via
+`process.env.SHOPIFY_ADMIN_TOKEN!`, **an unset token surfaces here as `accessToken`** — export it (step 2). |
 | `Schema module "…" must export a schemas array.` | `src/schema.ts` doesn't `export const schemas = [...]`. Add it. |
-| `Sync failed: Shopify rejected a request.` (exit 1) | The request reached Shopify and was refused — a bad or expired token (present but rejected), a wrong `shop`, or missing scopes. |
-| `push` exits `2` with `⚠ blocked` lines | Ops couldn't run — an unmet dependency or a reference cycle among created types. See [`SYNC.md` §5](./SYNC.md#5-push). |
+| `Sync failed: Shopify rejected a request.` (exit 1) | The request reached Shopify and was refused — a bad or expired
+token (present but rejected), a wrong `shop`, or missing scopes. |
+| `push` exits `2` with `⚠ blocked` lines | Ops couldn't run — an unmet dependency or a reference cycle among created
+types. See [`SYNC.md` §5](./SYNC.md#5-push). |
 | `push` exits `2` with `✗ failed` lines | Shopify returned `userErrors` for that op (e.g. an invalid validation). The message is in the line. |
 | Destructive changes won't apply | Expected — pass `--allow-destructive`. |
 | `pull` warns it's overwriting | Expected — it regenerates the file. Pass `--force` to silence, or commit first so you can diff the regeneration. |
