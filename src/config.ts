@@ -9,6 +9,8 @@ export interface Config {
   apiVersion?: string;
   /** Path to the schema module whose `schemas` export drives diff/push, and pull writes. */
   schema: string;
+  /** Optional path to a module whose `entries` export declares seed entries to upsert on push. */
+  entries?: string;
   /** Scope for all metaobjects, unless overridden per-metaobject. Defaults to "app". */
   scope?: "app" | "merchant";
   /** Default admin access for app-scoped metaobjects: false → merchant_read, true → merchant_read_write. Defaults to false. */
@@ -27,6 +29,9 @@ export function validateConfig(raw: unknown): Config {
     if (!c || typeof c[key] !== "string" || c[key] === "") {
       throw new Error(`Invalid config: missing or empty "${key}".`);
     }
+  }
+  if (c?.entries !== undefined && (typeof c.entries !== "string" || c.entries === "")) {
+    throw new Error(`Invalid config: "entries" must be a non-empty path string when set.`);
   }
   return c as Config;
 }

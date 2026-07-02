@@ -37,6 +37,12 @@ class ListField<E extends Field<any, any, any>, R extends boolean> extends Field
     });
     return issues.length ? { issues } : { value: out };
   }
+  // Element-wise, so inner canonicalization overrides (money, rating, …) apply per element.
+  override jsonEquals(a: unknown, b: unknown): boolean {
+    if (!Array.isArray(a) || !Array.isArray(b)) return super.jsonEquals(a, b);
+    if (a.length !== b.length) return false;
+    return a.every((el, i) => this.inner.jsonEquals(el, b[i]));
+  }
 }
 
 export function list<E extends Field<any, any, any>, R extends boolean = false>(

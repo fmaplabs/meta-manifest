@@ -29,6 +29,13 @@ class MeasurementField<R extends boolean> extends Field<Measure, Measure, R> {
     }
     return { value: { value, unit: o.unit } };
   }
+  // Shopify may return the value as a string ("2.5") — compare the coerced number + unit.
+  override jsonEquals(a: unknown, b: unknown): boolean {
+    const ra = this.fromJson(a);
+    const rb = this.fromJson(b);
+    if (ra.issues || rb.issues) return super.jsonEquals(a, b);
+    return ra.value.value === rb.value.value && ra.value.unit === rb.value.unit;
+  }
 }
 
 export function dimension<R extends boolean = false>(opts: MeasureOptions<R> = {}): MeasurementField<R> {

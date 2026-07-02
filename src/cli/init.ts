@@ -7,6 +7,7 @@ export default defineConfig({
   shop: "my-store.myshopify.com",
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   schema: "./src/schema.ts",
+  // entries: "./src/entries.ts",
 });
 `;
 

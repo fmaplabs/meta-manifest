@@ -39,6 +39,9 @@ need an access token with the right scopes:
 | `pull`, `diff` | `read_metaobject_definitions`                                    |
 | `push`         | `write_metaobject_definitions` (implies read)                   |
 
+When `entries` is set in the config (seed-entry sync), `diff` additionally needs
+`read_metaobjects` and `push` needs `write_metaobjects`.
+
 The simplest way to get one is a **custom app** created in the store's admin
 (**Settings → Apps and sales channels → Develop apps**), which issues an Admin
 API access token you grant the scopes above. See Shopify's
@@ -89,6 +92,7 @@ export default defineConfig({
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   // apiVersion: "2026-07", // optional; defaults to the package's DEFAULT_API_VERSION
   schema: "./src/schema.ts", // where pull writes, and diff/push read
+  // entries: "./src/entries.ts", // optional; seed entries to upsert on push
   // scope: "app",           // optional; "app" (default) | "merchant" — applies to all metaobjects
   // merchantEditable: false, // optional; default admin access for app-scoped metaobjects
 });
@@ -200,6 +204,20 @@ If a metaobject's `scope` changed since it was created, `diff`/`push` print a
 `Warning:` line — `type` is immutable, so the old definition is orphaned rather
 than migrated (see [`SYNC.md` §3](./SYNC.md#3-pull)).
 
+When `entries` is configured, `diff` also plans the declared seed entries after
+the definitions plan (`createEntry`, or `updateEntry` naming the drifted fields):
+
+```
+Everything is in sync — nothing to apply.
+2 entry changes would be applied:
+  createEntry: $app:book/persuasion
+  updateEntry: $app:author/jane-austen · favoriteBook, status
+```
+
+A bad entry declaration (missing required field, invalid handle, a reference to
+an undeclared entry, …) aborts with `Entry validation failed:` and exit `1` —
+see [`SYNC.md`](./SYNC.md#seed-entries-upsert-only) for the full model.
+
 ---
 
 ## 6. Apply with `push`
@@ -230,6 +248,21 @@ The four op statuses:
 - **`⚠ blocked`** — couldn't run (an unmet dependency — e.g. a referenced type
   whose own create failed).
 - **`✗ failed`** — the mutation ran but Shopify returned errors.
+
+When `entries` is configured, the declared entries are upserted **after**
+definitions (so a just-created definition can receive its entries), with their
+own result lines and summary:
+
+```
+  ✓ applied — createEntry: $app:book/persuasion
+  ✓ applied — createEntry: $app:author/jane-austen
+entries: applied 2 · blocked 0 · failed 0
+```
+
+Entry sync is upsert-only: it never deletes entries or clears undeclared fields.
+Entry ops for a definition whose create failed are `⚠ blocked`, and entry
+declarations are validated *before* any network call — a bad declaration exits
+`1` without touching the store.
 
 To apply the destructive ops too:
 
@@ -272,7 +305,7 @@ The exit codes are what a CI gate keys off of:
 | ---- | ---------------------------------------------------------------------------------- |
 | `0`  | Success. **Also returned when destructive ops were skipped** — a skip is not a failure. |
 | `1`  | A config or transport error (bad/missing config, Shopify rejected a request).      |
-| `2`  | **`push` only** — one or more ops `failed` **or** `blocked`, so the store is partially applied. |
+| `2`  | **`push` only** — one or more ops (definition **or** entry) `failed` **or** `blocked`, so the store is partially applied. |
 
 The important subtleties:
 

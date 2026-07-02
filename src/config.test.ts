@@ -18,4 +18,12 @@ describe("config", () => {
     expect(() => validateConfig({ shop: "s", schema: "./s.ts" })).toThrow(/accessToken/);
     expect(() => validateConfig({ shop: "s", accessToken: "t" })).toThrow(/schema/);
   });
+
+  it("validateConfig accepts a valid entries path and rejects a non-string one", () => {
+    const base = { shop: "s", accessToken: "t", schema: "./s.ts" };
+    expect(validateConfig({ ...base, entries: "./e.ts" }).entries).toBe("./e.ts");
+    expect(validateConfig(base).entries).toBeUndefined();
+    expect(() => validateConfig({ ...base, entries: 42 })).toThrow(/entries/);
+    expect(() => validateConfig({ ...base, entries: "" })).toThrow(/entries/);
+  });
 });

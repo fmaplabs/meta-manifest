@@ -131,10 +131,11 @@ function splitCyclicFields(
 }
 
 /**
- * Kahn's topological sort: returns create `types` in dependency-first order.
- * Types left unordered are entangled in a reference cycle. [design §7]
+ * Kahn's topological sort: returns create keys in dependency-first order.
+ * Keys left unordered are entangled in a reference cycle. Shared by definition
+ * creates (keys = types) and entry creates (keys = "type/handle"). [design §7]
  */
-function topoSortCreates(types: Set<string>, deps: Map<string, Set<string>>): { ordered: string[]; unordered: string[] } {
+export function topoSort(types: Set<string>, deps: Map<string, Set<string>>): { ordered: string[]; unordered: string[] } {
   const remaining = new Map<string, number>();
   const dependents = new Map<string, string[]>();
   for (const t of types) {
@@ -201,7 +202,7 @@ export async function push(
     deps.set(op.type, new Set(targets.filter((t) => createTypes.has(t) && t !== op.type)));
   }
 
-  const { ordered, unordered } = topoSortCreates(createTypes, deps);
+  const { ordered, unordered } = topoSort(createTypes, deps);
   const cyclicTypes = new Set(unordered);
   const createByType = new Map(createOps.map((x) => [x.op.type, x]));
 

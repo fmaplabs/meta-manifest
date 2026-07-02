@@ -6,9 +6,11 @@ Think [tento](https://github.com/drizzle-team/tento), but scoped to metaobject-d
 schema/migrations rather than a runtime query client (see [Roadmap](#roadmap-runtime-query-client)
 below).
 
-`meta-manifest` is **not** a runtime client for reading/writing metaobject *entries* — it declares
+`meta-manifest` is **not** a runtime client for querying metaobject *entries* — it declares
 definitions, validates values against them, and syncs the definitions themselves (create/update
-fields) to a store via `pull` → `diff` → `push`.
+fields) to a store via `pull` → `diff` → `push`. It can also declare **seed entries** in code and
+upsert them on `push` (see [Seed entries](#seed-entries)) — but never enumerates, queries, or
+deletes store data.
 
 ## Install
 
@@ -115,6 +117,47 @@ For the full `pull` → `diff` → `push` sync model (how local schema and a liv
 reconciled, destructive-change gating, dependency ordering, error handling), see
 [`docs/SYNC.md`](./docs/SYNC.md).
 
+## Seed entries
+
+Beyond definitions, specific metaobject **entries** (data instances) can be declared by handle
+and kept in sync. Declare them with `defineEntries` in a module that exports an `entries` array,
+and point `entries` in the config at it:
+
+```ts
+// src/entries.ts
+import { defineEntries, entryRef } from "@fmaplabs/meta-manifest";
+import { Author, Book } from "./schema";
+
+export const bookEntries = defineEntries(Book, {
+  persuasion: { title: "Persuasion" },
+});
+
+export const authorEntries = defineEntries(Author, {
+  "jane-austen": {
+    name: "Jane Austen",
+    favoriteBook: entryRef(Book, "persuasion"),      // reference another declared entry
+    portrait: "gid://shopify/MediaImage/123",        // raw GIDs pass through untouched
+  },
+}, { status: "active" });                            // optional publishable status for the set
+
+export const entries = [bookEntries, authorEntries];
+```
+
+Entry values are typed against the schema's `InferInput`, validated at plan time (before any
+network call), and upserted via `metaobjectUpsert` when `mm push` runs — after definitions.
+
+The model is **upsert-only seed data**:
+
+- Only declared `(type, handle)` pairs are ever touched. Merchant-created entries, and fields you
+  don't declare on a declared entry, are never compared, written, or deleted.
+- `entryRef(Target, "handle")` references another **declared** entry; push creates referenced
+  entries first and resolves the reference to its GID. Reference cycles (and self-references) are
+  handled with a two-pass upsert. One caveat: a *required* reference field inside an entry cycle
+  may fail the first pass with a Shopify userError.
+- To reference products, files, or entries meta-manifest doesn't manage, use a raw
+  `gid://shopify/...` string.
+- `mm diff` previews entry changes the same way it previews definition changes.
+
 ## CLI
 
 The CLI drives sync against a real store using an Admin API access token. For a
@@ -133,6 +176,7 @@ export default defineConfig({
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   apiVersion: "2026-07",           // optional; defaults to DEFAULT_API_VERSION
   schema: "./src/schema.ts",       // where `pull` writes, `diff`/`push` read
+  entries: "./src/entries.ts",     // optional; seed entries to upsert on push
   scope: "app",                    // optional; "app" (default) | "merchant" — applies to all metaobjects
   merchantEditable: false,         // optional; default admin access for app-scoped metaobjects
 });
@@ -141,7 +185,9 @@ export default defineConfig({
 Set `SHOPIFY_ADMIN_TOKEN` before running `pull`, `diff`, or `push` — either export it into your
 shell or put it in a `.env` file in the project root, which the CLI loads automatically (real
 environment variables take precedence). The token needs the `read_metaobject_definitions` scope for
-`pull`/`diff`, and `write_metaobject_definitions` (which implies read) for `push`.
+`pull`/`diff`, and `write_metaobject_definitions` (which implies read) for `push`. When `entries`
+is configured, it additionally needs `read_metaobjects` for `diff` and `write_metaobjects` for
+`push`.
 
 ### Commands
 
@@ -149,8 +195,8 @@ environment variables take precedence). The token needs the `read_metaobject_def
 |----------|----------|------|
 | `mm init` | Scaffold `meta-manifest.config.ts` + a starter `src/schema.ts`. No network. | 0 / 1 |
 | `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style — writes/overwrites the schema source file). | 0 / 1 |
-| `mm diff` | Load `schema.ts`, compare it against the store, and print the plan. Read-only. | 0 / 1 |
-| `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType` are skipped unless you pass `--allow-destructive`. | 0 / 1 / 2 |
+| `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared entries when configured). Read-only. | 0 / 1 |
+| `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType` are skipped unless you pass `--allow-destructive`. Declared entries are upserted after definitions. | 0 / 1 / 2 |
 
 ```bash
 npx mm init                    # scaffold config + schema
@@ -174,6 +220,6 @@ config/transport error, and `0` otherwise — including when destructive ops wer
 
 ## Roadmap: runtime query client
 
-v1 covers metaobject **definitions** (schema sync) only. A runtime client for reading/writing
-metaobject **entries** — the tento-style query API — is not implemented yet and is tracked as a
-follow-up.
+Definitions (schema sync) and declared seed entries are covered. A runtime client for
+querying/enumerating metaobject **entries** — the tento-style query API — is not implemented
+yet and is tracked as a follow-up.

@@ -32,6 +32,14 @@ class DateField<R extends boolean> extends StringScalarField<R> {
     if (this.o.max != null) v.push({ name: "max", value: this.o.max });
     return v;
   }
+  // Shopify normalizes date_time to UTC — compare instants, not strings.
+  override wireEquals(local: string, remote: string): boolean {
+    if (this.shopifyType !== "date_time") return super.wireEquals(local, remote);
+    const l = Date.parse(local);
+    const r = Date.parse(remote);
+    if (Number.isNaN(l) || Number.isNaN(r)) return super.wireEquals(local, remote);
+    return l === r;
+  }
 }
 
 interface UrlOptions<R extends boolean = false> extends BaseOptions<R> {

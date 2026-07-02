@@ -281,6 +281,71 @@ try {
 
 ---
 
+## Seed entries (upsert-only)
+
+When entries are declared with `defineEntries` (and wired up via `entries` in the CLI
+config), the same plan/apply pipeline runs for them after definitions:
+`resolveEntries` → `pullEntries` → `diffEntries` → `pushEntries`.
+
+The model is deliberately narrower than definition sync:
+
+- **Upsert-only.** Every operation is a `metaobjectUpsert` with the `metaobject`
+  argument, which is a **partial update** — only the fields in the payload are
+  written. Nothing is ever deleted: not entries, not fields.
+- **Only declared data is managed.** Diff compares only the declared
+  `(type, handle)` pairs, and within them only the declared fields. Merchant-created
+  entries and undeclared fields on declared entries are invisible to the pipeline.
+- **Validation happens at plan time.** Each declared value is round-tripped through
+  its field's `encode` → `decode` before any network call: shape errors, constraint
+  violations (rating bounds, color format…), missing required fields, bad handles,
+  duplicate declarations, and misplaced `$entry:` placeholders all fail the plan
+  with `Issue`s, and nothing is pushed.
+
+### Entry references
+
+`entryRef(Target, "handle")` produces a placeholder string
+(`"$entry:$app:target/handle"`) that type-checks anywhere a reference field accepts
+input — `m.ref`, `m.mixedRef`, and `m.list(...)` of either. At diff time placeholders
+resolve to the pulled entries' GIDs; at push time, to the GIDs of entries created in
+the same run.
+
+- The target must itself be a **declared** entry. To point at anything meta-manifest
+  doesn't manage (products, files, merchant entries), pass a raw `gid://shopify/...`
+  string instead — it passes through untouched.
+- Creates are dependency-ordered (referenced entry first, same Kahn sort as
+  definitions). A **reference cycle** — or a self-reference — is handled by deferral:
+  any field whose placeholder can't resolve yet is omitted from the create and added
+  by a second upsert once every entry in the run exists (safe because upserts are
+  partial updates).
+- **Known limitation:** a *required* reference field inside an entry cycle may fail
+  the first-pass create with a Shopify userError, since it's omitted there.
+
+### Status
+
+`defineEntries(schema, {...}, { status: "active" | "draft" })` manages the
+publishable status for the set. It's compared case-insensitively against the pulled
+status and only written when declared. The definition needs the `publishable`
+capability — without it Shopify rejects the write as a per-op userError (`failed`).
+
+### Interaction with definition sync
+
+- At diff time, entries of a type whose definition doesn't exist yet are planned as
+  `createEntry` without pulling (there is nothing to pull).
+- At push time, definitions go first. If a definition create fails or is blocked,
+  every entry op for that type is `blocked` — as is any entry depending on one of
+  those.
+- Wire comparison uses per-field-type equality (`wireEquals`) that absorbs known
+  Shopify canonicalizations (money `"12.5"` → `"12.50"`, rating numbers vs. strings,
+  `date_time` timezone normalization, measurement value forms). A canonicalization
+  not covered yet shows up as a persistent one-op diff; the re-upsert it causes is
+  idempotent and harmless — report it so an override can be added.
+
+`pushEntries` reports per-op results exactly like `push`: `applied` / `blocked` /
+`failed` (per-op `userErrors`, never thrown), with `SyncTransportError` reserved for
+transport/top-level failures.
+
+---
+
 ## 7. Putting it together (standalone script)
 
 This is the same wiring `mm push` does under the hood, using the built-in
@@ -325,6 +390,10 @@ pnpm test
 [`../src/sync/sync.e2e.test.ts`](../src/sync/sync.e2e.test.ts) runs define →
 pull → diff → push end-to-end against a fake, in-file `AdminGraphQLClient` (an
 empty store, asserting referenced-type-first create ordering).
+[`../src/sync/entries.e2e.test.ts`](../src/sync/entries.e2e.test.ts) does the
+same for seed entries — an entry-level reference cycle over an empty store,
+asserting definitions-before-entries ordering, the two-pass upsert payloads,
+and that a second run diffs to zero ops.
 [`../src/sync/push.test.ts`](../src/sync/push.test.ts) covers the rest of the
 scenarios described above against the same kind of fake client — destructive
 ops skipped by default and applied under `allowDestructive: true`, two-pass

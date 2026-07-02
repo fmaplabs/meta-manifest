@@ -1,5 +1,16 @@
-import type { AdminGraphQLClient, DiffOp, MetaobjectDefinitionInput, PulledRemote, ScopeConfig } from "../index";
-import { diff, normalizeDefinition, normalizeRemote, pull, resolveDefinitions } from "../index";
+import type {
+  AdminGraphQLClient,
+  AnyEntries,
+  DiffOp,
+  EntryOp,
+  Issue,
+  MetaobjectDefinitionInput,
+  PulledEntry,
+  PulledRemote,
+  ResolvedEntry,
+  ScopeConfig,
+} from "../index";
+import { diff, diffEntries, normalizeDefinition, normalizeRemote, pull, pullEntries, resolveDefinitions, resolveEntries } from "../index";
 import type { AnySchema } from "../index";
 
 const APP_PREFIX = "$app:";
@@ -38,6 +49,35 @@ async function detectScopeFlips(
     }
   }
   return warnings;
+}
+
+export interface EntryPlan {
+  plan: EntryOp[];
+  entries: ResolvedEntry[];
+  remote: PulledEntry[];
+  issues: Issue[];
+}
+
+/**
+ * Resolve + validate declared entries, pull the declared keys, and diff.
+ * Validation issues short-circuit before any network call. Pulls are skipped
+ * for types whose definition doesn't exist yet (`pendingCreateTypes`) — their
+ * entries are creates by construction.
+ */
+export async function planEntriesFor(
+  client: AdminGraphQLClient,
+  entrySets: AnyEntries[],
+  schemas: AnySchema[],
+  config: ScopeConfig = {},
+  opts: { pendingCreateTypes?: ReadonlySet<string> } = {},
+): Promise<EntryPlan> {
+  const { entries, issues } = resolveEntries(entrySets, schemas, config);
+  if (issues.length > 0) return { plan: [], entries: [], remote: [], issues };
+  const keys = entries
+    .filter((e) => !opts.pendingCreateTypes?.has(e.type))
+    .map((e) => ({ type: e.type, handle: e.handle }));
+  const remote = await pullEntries(client, keys);
+  return { plan: diffEntries(entries, remote), entries, remote, issues: [] };
 }
 
 /** Resolve scope, pull the effective types, normalize, and diff local↔remote. */

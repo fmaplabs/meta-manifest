@@ -29,6 +29,13 @@ class MoneyField<R extends boolean> extends Field<Money, Money, R> {
     }
     return { value: { amount: o.amount, currencyCode: o.currency_code } };
   }
+  // Shopify canonicalizes stored amounts ("12.5" comes back "12.50") — compare numerically.
+  override jsonEquals(a: unknown, b: unknown): boolean {
+    const ra = this.fromJson(a);
+    const rb = this.fromJson(b);
+    if (ra.issues || rb.issues) return super.jsonEquals(a, b);
+    return Number(ra.value.amount) === Number(rb.value.amount) && ra.value.currencyCode === rb.value.currencyCode;
+  }
 }
 
 export function money<R extends boolean = false>(opts: MoneyOptions<R> = {}): MoneyField<R> {

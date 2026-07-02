@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { createJiti } from "jiti";
 import { validateConfig } from "../config";
 import type { Config } from "../config";
-import type { AnySchema } from "../index";
+import type { AnyEntries, AnySchema } from "../index";
 
 const jiti = createJiti(import.meta.url);
 
@@ -21,4 +21,14 @@ export async function loadSchemas(schemaPath: string): Promise<AnySchema[]> {
     throw new Error(`Schema module "${schemaPath}" must export a \`schemas\` array.`);
   }
   return mod.schemas as AnySchema[];
+}
+
+/** Load the `entries` export (an array of `defineEntries(...)` sets) from an entries module. */
+export async function loadEntries(entriesPath: string): Promise<AnyEntries[]> {
+  const abs = resolve(process.cwd(), entriesPath);
+  const mod = await jiti.import<{ entries?: unknown }>(abs);
+  if (!Array.isArray(mod.entries)) {
+    throw new Error(`Entries module "${entriesPath}" must export an \`entries\` array.`);
+  }
+  return mod.entries as AnyEntries[];
 }

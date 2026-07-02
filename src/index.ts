@@ -5,6 +5,8 @@ export { m, Field } from "./fields/index";
 export type { DecodeResult, FieldValidation, Issue, Money, Measure, Rating, RatingInput, FileType, TypeRef } from "./fields/index";
 
 export { defineMetaobject } from "./define";
+export { defineEntries, entryRef, parseEntryRef, ENTRY_REF_PREFIX } from "./entries";
+export type { EntriesDef, EntriesOptions, EntryRef, AnyEntries } from "./entries";
 export type {
   Infer,
   InferInput,
@@ -39,6 +41,15 @@ export { pull, pullAll } from "./sync/pull";
 export type { PulledRemote } from "./sync/pull";
 export { push } from "./sync/push";
 export type { PushOptions, PushResult, PushOpResult } from "./sync/push";
+
+export { resolveEntries, placeholderRefs, substituteFieldValue } from "./sync/entry-resolve";
+export type { ResolvedEntry, EntryRefEdge } from "./sync/entry-resolve";
+export { pullEntries } from "./sync/entry-pull";
+export type { PulledEntry, PulledEntryField } from "./sync/entry-pull";
+export { diffEntries } from "./sync/entry-diff";
+export type { EntryOp } from "./sync/entry-diff";
+export { pushEntries } from "./sync/entry-push";
+export type { EntryPushResult, EntryPushOpResult } from "./sync/entry-push";
 export { SyncTransportError } from "./sync/client";
 export type { AdminGraphQLClient } from "./sync/client";
 

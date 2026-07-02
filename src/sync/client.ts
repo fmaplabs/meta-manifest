@@ -81,6 +81,21 @@ export const UPDATE_DEFINITION_MUTATION = `mutation UpdateMetaobjectDefinition($
   }
 }`;
 
+export const PULL_ENTRY_QUERY = `query PullMetaobjectEntry($handle: MetaobjectHandleInput!) {
+  metaobjectByHandle(handle: $handle) {
+    id handle type
+    fields { key value jsonValue }
+    capabilities { publishable { status } }
+  }
+}`;
+
+export const UPSERT_ENTRY_MUTATION = `mutation UpsertMetaobjectEntry($handle: MetaobjectHandleInput!, $metaobject: MetaobjectUpsertInput!) {
+  metaobjectUpsert(handle: $handle, metaobject: $metaobject) {
+    metaobject { id handle }
+    userErrors { field message code }
+  }
+}`;
+
 /**
  * Thrown when a request fails at the transport or top-level GraphQL layer —
  * distinct from per-op `userErrors`, which `push` reports as `failed` rather

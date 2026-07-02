@@ -6,6 +6,19 @@ export type DecodeResult<T> =
   | { value: T; issues?: undefined }
   | { value?: undefined; issues: Issue[] };
 
+/** Deep JSON equality, insensitive to object key order. */
+export function jsonDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((el, i) => jsonDeepEqual(el, b[i]));
+  }
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((k) => jsonDeepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
 /** Options every field builder accepts, regardless of type. */
 export interface CommonFieldOptions {
   name?: string;
@@ -76,6 +89,30 @@ export abstract class Field<TOut, TIn = TOut, Req extends boolean = false> {
   encode(value: TIn): string {
     const json = this.toJson(value);
     return this.wireIsJson ? JSON.stringify(json) : String(json);
+  }
+
+  /**
+   * JSON-form equality for this field's values. Overridden where Shopify
+   * canonicalizes what it stores (money amounts, rating numbers, …) so a
+   * re-encoded local value still compares equal to the pulled remote value.
+   */
+  jsonEquals(a: unknown, b: unknown): boolean {
+    return jsonDeepEqual(a, b);
+  }
+
+  /**
+   * Wire-string equality used by entry diffing: strict for plain string wires,
+   * `jsonEquals` over the parsed forms for JSON wires (key order, whitespace,
+   * and type-specific canonicalization don't produce false diffs).
+   */
+  wireEquals(local: string, remote: string): boolean {
+    if (local === remote) return true;
+    if (!this.wireIsJson) return false;
+    try {
+      return this.jsonEquals(JSON.parse(local), JSON.parse(remote));
+    } catch {
+      return false;
+    }
   }
 
   /** Element-level JSON form (for embedding inside list values). */

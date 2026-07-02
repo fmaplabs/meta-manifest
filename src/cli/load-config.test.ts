@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadConfig, loadSchemas } from "./load-config";
+import { loadConfig, loadEntries, loadSchemas } from "./load-config";
 
 function tmp(name: string, contents: string): string {
   const dir = mkdtempSync(join(tmpdir(), "mm-load-"));
@@ -32,5 +32,21 @@ describe("loadConfig / loadSchemas", () => {
        export const schemas = [A];`);
     const schemas = await loadSchemas(file);
     expect(schemas.map((s) => s.type)).toEqual(["$app:a"]);
+  });
+
+  it("loads the entries array from an entries module", async () => {
+    const idx = JSON.stringify(join(process.cwd(), "src/index.ts"));
+    const file = tmp("entries.ts",
+      `import { defineMetaobject, defineEntries, m } from ${idx};
+       const A = defineMetaobject("a", { name: "A", fields: { n: m.text() } });
+       export const entries = [defineEntries(A, { one: { n: "1" } })];`);
+    const entries = await loadEntries(file);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].schema.type).toBe("$app:a");
+  });
+
+  it("throws when an entries module lacks the entries export", async () => {
+    const file = tmp("entries.ts", `export const nope = [];`);
+    await expect(loadEntries(file)).rejects.toThrow(/entries.*array/);
   });
 });

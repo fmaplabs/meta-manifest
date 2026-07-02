@@ -47,6 +47,17 @@ class RatingField<R extends boolean> extends Field<Rating, RatingInput, R> {
       ? [{ message: `Rating must be between ${value.scaleMin} and ${value.scaleMax}` }]
       : [];
   }
+  // Local toJson emits string numbers; Shopify returns bare numbers — compare numerically.
+  override jsonEquals(a: unknown, b: unknown): boolean {
+    const ra = this.fromJson(a);
+    const rb = this.fromJson(b);
+    if (ra.issues || rb.issues) return super.jsonEquals(a, b);
+    return (
+      ra.value.value === rb.value.value &&
+      ra.value.scaleMin === rb.value.scaleMin &&
+      ra.value.scaleMax === rb.value.scaleMax
+    );
+  }
   override get ["~standard"](): StandardSchemaV1.Props<RatingInput, Rating> {
     return {
       version: 1,
