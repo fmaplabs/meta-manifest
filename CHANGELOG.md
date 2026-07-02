@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Merchant-scope reference targets now push as definition GIDs.** Shopify's
+  `metaobject_definition_type` validation only resolves app-reserved types, so
+  `metaobjectDefinitionCreate`/`Update` rejected any `m.ref`/`m.mixedRef` pointing at a
+  merchant-scoped (bare) type ("Validations require that you select a metaobject"). `push`
+  now rewrites those validations to `metaobject_definition_id`/`_ids` at send time (ids come
+  from `pull`, or from a create earlier in the same run), and pulled definitions are
+  normalized back to the type-form canon before `diff`/codegen (`normalizeRemote` takes an
+  optional `typeById` map), so round-trips stay clean. New `refValidationsToIds`/
+  `refValidationsToTypes` helpers exported from the library root. App-reserved (`$app:`) ref
+  targets keep the documented type-form behavior.
+
 - **Multi-file schema declaration.** Declare each metaobject in its own module as
   `export default defineMetaobject(...)` and import them into the main schema module's
   `schemas` array; entry sets can be split the same way (`export default defineEntries(...)`

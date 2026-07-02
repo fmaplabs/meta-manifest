@@ -36,6 +36,7 @@ export type {
 } from "./sync/normalize";
 export { resolveDefinitions } from "./sync/resolve";
 export type { ScopeConfig, Scope } from "./sync/resolve";
+export { refValidationsToIds, refValidationsToTypes } from "./sync/ref-validations";
 
 export { pull, pullAll } from "./sync/pull";
 export type { PulledRemote } from "./sync/pull";

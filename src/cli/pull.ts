@@ -20,7 +20,8 @@ export async function runPull(args: {
   force?: boolean;
 }): Promise<{ written: string; count: number }> {
   const remote = await pullAll(args.client); // app-owned only
-  const defs = remote.map((r) => normalizeRemote(r.definition));
+  const typeById = new Map(remote.map((r) => [r.id, r.type]));
+  const defs = remote.map((r) => normalizeRemote(r.definition, typeById));
   const source = await maybeFormat(generateSchemaSource(defs));
 
   const abs = resolve(process.cwd(), args.schemaPath);

@@ -90,7 +90,9 @@ export async function planFor(
   const types = definitions.map((d) => d.type);
   const localDefs = definitions.map(normalizeDefinition);
   const remote = await pull(client, types);
-  const plan = diff(localDefs, remote.map((r) => normalizeRemote(r.definition)));
+  // GID-form ref validations on pulled defs are re-labeled to the managed types' canon.
+  const typeById = new Map(remote.map((r) => [r.id, r.type]));
+  const plan = diff(localDefs, remote.map((r) => normalizeRemote(r.definition, typeById)));
   const warnings = await detectScopeFlips(client, definitions, plan);
   return { plan, remote, definitions, warnings };
 }

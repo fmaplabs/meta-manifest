@@ -9,6 +9,7 @@ import type {
 import { CREATE_DEFINITION_MUTATION, execute, UPDATE_DEFINITION_MUTATION, type AdminGraphQLClient } from "./client";
 import type { DefinitionChange, DiffOp } from "./diff";
 import type { PulledRemote } from "./pull";
+import { refValidationsToIds } from "./ref-validations";
 
 export interface PushOptions {
   /** Apply destructive ops (`removeField`, `changeFieldType`). Default false. */
@@ -209,9 +210,20 @@ export async function push(
   // Types whose create this run failed or was blocked — their dependents block too.
   const failedTypes = new Set<string>();
 
+  /**
+   * Field input with merchant-scope ref targets resolved to definition GIDs at send
+   * time — `idByType` holds pulled ids plus ids captured from creates earlier this
+   * run (creates are dependency-first, so a same-run target's id exists by then).
+   */
+  function resolveFieldRefs(f: FieldDefinitionInput): FieldDefinitionInput {
+    return { ...f, validations: refValidationsToIds(f.validations, idByType) };
+  }
+
   /** Run a `metaobjectDefinitionCreate` for `definition`, recording the new id or failure. */
   async function createDefinition(op: DiffOp, definition: MetaobjectDefinitionInput): Promise<PushOpResult> {
-    const data = await execute<{ metaobjectDefinitionCreate: MutationPayload }>(client, CREATE_DEFINITION_MUTATION, { definition });
+    const data = await execute<{ metaobjectDefinitionCreate: MutationPayload }>(client, CREATE_DEFINITION_MUTATION, {
+      definition: { ...definition, fieldDefinitions: definition.fieldDefinitions.map(resolveFieldRefs) },
+    });
     const payload = data.metaobjectDefinitionCreate;
     if (payload.userErrors.length) {
       failedTypes.add(op.type);
@@ -270,7 +282,7 @@ export async function push(
     switch (op.kind) {
       case "addField": {
         const field = fieldInputFor(defByType, op.type, op.field.key);
-        return field ? [{ create: field }] : undefined;
+        return field ? [{ create: resolveFieldRefs(field) }] : undefined;
       }
       case "updateField": {
         const field = fieldInputFor(defByType, op.type, op.key);
@@ -280,7 +292,7 @@ export async function push(
           key: field.key,
           name: field.name,
           required: field.required,
-          validations: field.validations,
+          validations: refValidationsToIds(field.validations, idByType),
         };
         if (field.description != null) update.description = field.description;
         // Reconcile `adminFilterable` only when the field's filter state drifted. [design §8]
@@ -293,7 +305,7 @@ export async function push(
         return [{ delete: { key: op.key } }];
       case "changeFieldType": {
         const field = fieldInputFor(defByType, op.type, op.key);
-        return field ? [{ delete: { key: op.key } }, { create: field }] : undefined;
+        return field ? [{ delete: { key: op.key } }, { create: resolveFieldRefs(field) }] : undefined;
       }
       default:
         return undefined;
@@ -350,7 +362,7 @@ export async function push(
       results[index] = { op, status: "blocked", reason: `no definition id for "${op.type}"` };
       continue;
     }
-    const definition: { fieldDefinitions: FieldOpInput[] } = { fieldDefinitions: deferred.map((f) => ({ create: f })) };
+    const definition: { fieldDefinitions: FieldOpInput[] } = { fieldDefinitions: deferred.map((f) => ({ create: resolveFieldRefs(f) })) };
     const data = await execute<{ metaobjectDefinitionUpdate: MutationPayload }>(client, UPDATE_DEFINITION_MUTATION, { id, definition });
     const payload = data.metaobjectDefinitionUpdate;
     if (payload.userErrors.length) {

@@ -2,6 +2,7 @@ import type { MetaobjectSchema } from "../define";
 import type { FieldMap } from "../infer";
 import type { FieldValidation } from "../fields/base";
 import type { CapabilitiesInput, MetaobjectDefinitionInput } from "../definition-input";
+import { refValidationsToTypes } from "./ref-validations";
 
 export interface RemoteAccess {
   admin?: string;
@@ -139,7 +140,12 @@ function remoteCapabilities(caps: PulledCapabilities | null | undefined): Remote
   return out;
 }
 
-export function normalizeRemote(def: PulledDefinition): RemoteDefinition {
+/**
+ * `typeById` (definition GID → effective type) rewrites GID-form reference
+ * validations back to the canonical type-form the local schema declares, so
+ * diff/codegen never see the store's `metaobject_definition_id` spelling.
+ */
+export function normalizeRemote(def: PulledDefinition, typeById?: ReadonlyMap<string, string>): RemoteDefinition {
   const out: RemoteDefinition = {
     type: def.type,
     name: def.name,
@@ -149,7 +155,7 @@ export function normalizeRemote(def: PulledDefinition): RemoteDefinition {
       type: typeof f.type === "string" ? f.type : f.type.name,
       required: f.required,
       filterable: f.capabilities?.adminFilterable?.enabled ?? false,
-      validations: f.validations ?? [],
+      validations: typeById ? refValidationsToTypes(f.validations ?? [], typeById) : (f.validations ?? []),
     })),
   };
   if (def.description != null) out.description = def.description;

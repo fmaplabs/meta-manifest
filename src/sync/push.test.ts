@@ -4,7 +4,7 @@ import { defineMetaobject } from "../define";
 import { m } from "../fields/index";
 import { CREATE_DEFINITION_MUTATION, UPDATE_DEFINITION_MUTATION, type AdminGraphQLClient } from "./client";
 import type { DiffOp } from "./diff";
-import { normalizeLocal } from "./normalize";
+import { normalizeDefinition, normalizeLocal } from "./normalize";
 import type { PulledRemote } from "./pull";
 import { push, referenceEdges } from "./push";
 
@@ -413,5 +413,79 @@ describe("referenceEdges", () => {
       ],
     };
     expect(referenceEdges(def)).toEqual([]);
+  });
+});
+
+// Merchant-scoped (bare) ref targets are only valid as definition GIDs on the wire
+// (`metaobject_definition_id`); the schema's type-form canon is translated at send time.
+describe("push — merchant-scope ref target resolution", () => {
+  const companiesDef: MetaobjectDefinitionInput = {
+    type: "company",
+    name: "Company",
+    fieldDefinitions: [{ key: "name", name: "Name", required: true, type: "single_line_text_field", validations: [] }],
+  };
+  const logoListDef: MetaobjectDefinitionInput = {
+    type: "logo_list",
+    name: "Logo List",
+    fieldDefinitions: [
+      {
+        key: "logos",
+        name: "Logos",
+        required: false,
+        type: "list.metaobject_reference",
+        validations: [{ name: "metaobject_definition_type", value: "company" }],
+      },
+    ],
+  };
+  const companyGid = "gid://shopify/MetaobjectDefinition/company-1";
+
+  /** Validations of the first field input in a create/update payload (plain or `{ create }`-tagged). */
+  function sentValidations(call: Call | undefined): unknown {
+    const definition = call?.variables?.definition as {
+      fieldDefinitions: Array<{ validations?: unknown } | { create: { validations?: unknown } }>;
+    };
+    const f = definition.fieldDefinitions[0];
+    return f && "create" in f ? f.create.validations : (f as { validations?: unknown } | undefined)?.validations;
+  }
+
+  it("createDefinition sends the pulled target definition's GID", async () => {
+    const { client, calls } = recordingClient();
+    const remote: PulledRemote = { id: companyGid, type: "company", definition: { type: "company", name: "Company", fieldDefinitions: [] } };
+    const plan: DiffOp[] = [{ kind: "createDefinition", type: "logo_list", definition: normalizeDefinition(logoListDef) }];
+    const result = await push(client, plan, { definitions: [logoListDef], remote: [remote] });
+
+    expect(result.ok).toBe(true);
+    expect(sentValidations(calls[0])).toEqual([{ name: "metaobject_definition_id", value: companyGid }]);
+  });
+
+  it("a same-run dependent create uses the id captured from its target's create", async () => {
+    const calls: Call[] = [];
+    const idFor = (type: string) => `gid://shopify/MetaobjectDefinition/${type}`;
+    const client: AdminGraphQLClient = async (query, options) => {
+      calls.push({ query, variables: options?.variables });
+      const type = (options?.variables?.definition as { type: string }).type;
+      return { data: { metaobjectDefinitionCreate: { metaobjectDefinition: { id: idFor(type), type }, userErrors: [] } } };
+    };
+    const plan: DiffOp[] = [
+      { kind: "createDefinition", type: "logo_list", definition: normalizeDefinition(logoListDef) },
+      { kind: "createDefinition", type: "company", definition: normalizeDefinition(companiesDef) },
+    ];
+    const result = await push(client, plan, { definitions: [logoListDef, companiesDef], remote: [] });
+
+    expect(result.ok).toBe(true);
+    // Dependency-first: company creates before logo_list, whose ref then carries company's new GID.
+    expect((calls[0]?.variables?.definition as { type: string }).type).toBe("company");
+    expect(sentValidations(calls[1])).toEqual([{ name: "metaobject_definition_id", value: idFor("company") }]);
+  });
+
+  it("addField resolves ref targets the same way", async () => {
+    const { client, calls } = recordingClient();
+    const remoteCompany: PulledRemote = { id: companyGid, type: "company", definition: { type: "company", name: "Company", fieldDefinitions: [] } };
+    const remoteList: PulledRemote = { id: "gid://shopify/MetaobjectDefinition/list-1", type: "logo_list", definition: { type: "logo_list", name: "Logo List", fieldDefinitions: [] } };
+    const plan: DiffOp[] = [{ kind: "addField", type: "logo_list", field: normalizeDefinition(logoListDef).fields[0]! }];
+    const result = await push(client, plan, { definitions: [logoListDef], remote: [remoteCompany, remoteList] });
+
+    expect(result.ok).toBe(true);
+    expect(sentValidations(calls[0])).toEqual([{ name: "metaobject_definition_id", value: companyGid }]);
   });
 });
