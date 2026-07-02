@@ -11,17 +11,21 @@ export default defineConfig({
 });
 `;
 
-const SCHEMA_TEMPLATE = `import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
+const METAOBJECT_TEMPLATE = `import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
 
-export const Author = defineMetaobject("author", {
+export default defineMetaobject("author", {
   name: "Author",
   fields: {
     name: m.text({ required: true, max: 120 }),
     bio: m.multilineText(),
   },
 });
+`;
 
-export const schemas = [Author];
+// One metaobject per file (default export); this module imports and aggregates them.
+const SCHEMA_TEMPLATE = `import author from "./metaobjects/author";
+
+export const schemas = [author];
 `;
 
 /** Scaffold config + schema files, never overwriting existing ones. */
@@ -36,6 +40,7 @@ export async function runInit(opts: { cwd?: string } = {}): Promise<{ created: s
     created.push(rel);
   };
   write("meta-manifest.config.ts", CONFIG_TEMPLATE);
+  write("src/metaobjects/author.ts", METAOBJECT_TEMPLATE);
   write("src/schema.ts", SCHEMA_TEMPLATE);
   if (created.length) {
     console.log(`Created: ${created.join(", ")}`);

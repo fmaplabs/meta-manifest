@@ -117,6 +117,56 @@ For the full `pull` → `diff` → `push` sync model (how local schema and a liv
 reconciled, destructive-change gating, dependency ordering, error handling), see
 [`docs/SYNC.md`](./docs/SYNC.md).
 
+## Declaring schemas across multiple files
+
+The schema module doesn't have to hold every definition. Declare each metaobject in its
+own file as the module's **default export**, import them into the main schema module (the
+file `schema` points at in the config), and list them in the `schemas` array. That array
+is the manifest `diff`/`push` read — a definition file that isn't imported there is
+invisible to the CLI.
+
+```ts
+// src/metaobjects/author.ts
+import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
+
+export default defineMetaobject("author", {
+  name: "Author",
+  fields: {
+    name: m.text({ required: true, max: 120 }),
+    bio: m.multilineText(),
+  },
+});
+```
+
+```ts
+// src/metaobjects/book.ts
+import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
+import Author from "./author";
+
+export default defineMetaobject("book", {
+  name: "Book",
+  fields: {
+    title: m.text({ required: true }),
+    author: m.ref(Author),
+  },
+});
+```
+
+```ts
+// src/schema.ts — the module `schema` in the config points at
+import author from "./metaobjects/author";
+import book from "./metaobjects/book";
+
+export const schemas = [author, book];
+```
+
+`mm init` scaffolds this layout. Cross-file references work exactly like same-file ones —
+including thunks for forward/circular references (`m.ref(() => Book)`). The loader
+validates every element of `schemas`: a file that forgets its `export default` imports as
+`undefined` and fails fast naming the offending index, and two files declaring the same
+metaobject type are rejected as a duplicate. One caveat: `mm pull` codegens a **single
+file**, so re-pulling overwrites the main schema module with all definitions inlined.
+
 ## Seed entries
 
 Beyond definitions, specific metaobject **entries** (data instances) can be declared by handle
@@ -141,6 +191,29 @@ export const authorEntries = defineEntries(Author, {
 }, { status: "active" });                            // optional publishable status for the set
 
 export const entries = [bookEntries, authorEntries];
+```
+
+Entry sets can be split across files the same way as
+[schemas](#declaring-schemas-across-multiple-files) — each file default-exports one
+`defineEntries(...)` set, and the main entries module imports them into the `entries` array:
+
+```ts
+// src/entries/authors.ts
+import { defineEntries } from "@fmaplabs/meta-manifest";
+import Author from "../metaobjects/author";
+
+export default defineEntries(Author, {
+  "jane-austen": { name: "Jane Austen" },
+  "ursula-le-guin": { name: "Ursula K. Le Guin" },
+});
+```
+
+```ts
+// src/entries.ts — the module `entries` in the config points at
+import authorEntries from "./entries/authors";
+import bookEntries from "./entries/books";
+
+export const entries = [authorEntries, bookEntries];
 ```
 
 Entry values are typed against the schema's `InferInput`, validated at plan time (before any
@@ -193,7 +266,7 @@ is configured, it additionally needs `read_metaobjects` for `diff` and `write_me
 
 | Command  | Behavior | Exit |
 |----------|----------|------|
-| `mm init` | Scaffold `meta-manifest.config.ts` + a starter `src/schema.ts`. No network. | 0 / 1 |
+| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema (`src/schema.ts` aggregating `src/metaobjects/author.ts`). No network. | 0 / 1 |
 | `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style — writes/overwrites the schema source file). | 0 / 1 |
 | `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared entries when configured). Read-only. | 0 / 1 |
 | `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType` are skipped unless you pass `--allow-destructive`. Declared entries are upserted after definitions. | 0 / 1 / 2 |

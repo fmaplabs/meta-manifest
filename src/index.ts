@@ -4,7 +4,7 @@ export type { Config } from "./config";
 export { m, Field } from "./fields/index";
 export type { DecodeResult, FieldValidation, Issue, Money, Measure, Rating, RatingInput, FileType, TypeRef } from "./fields/index";
 
-export { defineMetaobject } from "./define";
+export { defineMetaobject, isMetaobjectSchema } from "./define";
 export { defineEntries, entryRef, parseEntryRef, ENTRY_REF_PREFIX } from "./entries";
 export type { EntriesDef, EntriesOptions, EntryRef, AnyEntries } from "./entries";
 export type {

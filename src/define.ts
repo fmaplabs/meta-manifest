@@ -114,3 +114,16 @@ export function defineMetaobject<F extends Record<string, unknown>>(
   };
   return schemaRef as unknown as F extends FieldMap ? MetaobjectSchema<F> : never;
 }
+
+/** Whether a value is a `defineMetaobject(...)` schema — the loader's per-element check. */
+export function isMetaobjectSchema(value: unknown): value is MetaobjectSchema<FieldMap> {
+  if (typeof value !== "object" || value === null) return false;
+  const s = value as Partial<MetaobjectSchema<FieldMap>>;
+  return (
+    typeof s.handle === "string" &&
+    typeof s.type === "string" &&
+    typeof s.parse === "function" &&
+    typeof s.encode === "function" &&
+    typeof s.toDefinitionInput === "function"
+  );
+}

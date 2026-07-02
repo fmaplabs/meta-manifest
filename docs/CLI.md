@@ -74,13 +74,13 @@ npx mm init
 `init` never touches the network and never overwrites existing files. It writes:
 
 ```
-Created: meta-manifest.config.ts, src/schema.ts
+Created: meta-manifest.config.ts, src/metaobjects/author.ts, src/schema.ts
 Next: set SHOPIFY_ADMIN_TOKEN (export it or add it to .env), edit meta-manifest.config.ts, then run `mm diff`.
 ```
 
-(If both files already exist you'll get `Nothing to do — config and schema already exist.`)
+(If the files already exist you'll get `Nothing to do — config and schema already exist.`)
 
-Two files land in your project:
+Three files land in your project:
 
 **`meta-manifest.config.ts`** — safe to commit; the token comes from the environment:
 
@@ -104,22 +104,34 @@ required — an empty or missing one aborts with
 optional store-wide defaults (each metaobject can override `scope` locally) — see
 the [configuration options table](../README.md#configuration-options).
 
-**`src/schema.ts`** — a starter definition. The key requirement: the module must
-export a `schemas` array. That array is what `diff` and `push` read.
+**`src/metaobjects/author.ts`** — a starter definition. Each metaobject lives in
+its own module and is the module's **default export**:
 
 ```ts
 import { defineMetaobject, m } from "@fmaplabs/meta-manifest";
 
-export const Author = defineMetaobject("author", {
+export default defineMetaobject("author", {
   name: "Author",
   fields: {
     name: m.text({ required: true, max: 120 }),
     bio: m.multilineText(),
   },
 });
-
-export const schemas = [Author];
 ```
+
+**`src/schema.ts`** — the main schema module. The key requirement: it must export
+a `schemas` array listing every definition. That array is what `diff` and `push`
+read; a definition file that isn't imported here is invisible to the CLI.
+
+```ts
+import author from "./metaobjects/author";
+
+export const schemas = [author];
+```
+
+(Declaring everything inline in `src/schema.ts` works too — `schemas` is the
+contract, the file layout is yours. See
+[Declaring schemas across multiple files](../README.md#declaring-schemas-across-multiple-files).)
 
 `m` is the field builder namespace (`m.text`, `m.money`, `m.rating`, `m.ref`,
 `m.list`, …). Beyond fields, `defineMetaobject` accepts `scope`, `displayName`,
@@ -165,7 +177,11 @@ installed, the generated source is formatted with it.
 
 After `pull`, treat `src/schema.ts` as your source of truth — edit it in code,
 then continue to `diff`/`push`. Re-running `pull` throws your local edits away, so
-only re-pull when you deliberately want to re-baseline from the store.
+only re-pull when you deliberately want to re-baseline from the store. Note that
+`pull` always writes a **single file**: if you've split definitions across modules
+(see [multi-file schemas](../README.md#declaring-schemas-across-multiple-files)),
+a re-pull inlines everything back into the main schema module and your per-file
+layout has to be re-split by hand.
 
 ---
 

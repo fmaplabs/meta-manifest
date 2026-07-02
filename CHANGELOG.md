@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Multi-file schema declaration.** Declare each metaobject in its own module as
+  `export default defineMetaobject(...)` and import them into the main schema module's
+  `schemas` array; entry sets can be split the same way (`export default defineEntries(...)`
+  per file, aggregated in the main entries module). `loadSchemas`/`loadEntries` now validate
+  every element — a missing `export default` (which imports as `undefined`) fails fast naming
+  the offending index, and two files declaring the same metaobject type are rejected as a
+  duplicate. New `isMetaobjectSchema` type guard exported from the library root. `mm init`
+  scaffolds the multi-file layout (`src/metaobjects/author.ts` + an aggregating
+  `src/schema.ts`).
 - **`m.mixedRef([...])`** — a mixed-reference field that can point at several metaobject
   types (Shopify's `mixed_reference`), plus `m.list(m.mixedRef([...]))` for the list form
   (`list.mixed_reference`). Round-trips through `pull` codegen (emitted as lazy thunks) and
