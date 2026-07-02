@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProjectConfig",
+  "description": "Optional per-repo config, checked into the repo root as `.foldtime.json`.\nEvery field is optional — absence means \"use the default\".",
+  "type": "object",
+  "properties": {
+    "idleThresholdMinutes": {
+      "description": "Gap length that splits two heartbeats into separate sessions.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0
+    },
+    "project": {
+      "description": "Overrides the project name (default: the repo root's directory name).",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

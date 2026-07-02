@@ -1,0 +1,5 @@
+{
+  "$schema": "./.foldtime.schema.json",
+  "idleThresholdMinutes": 15,
+  "project": "meta-manifest"
+}
