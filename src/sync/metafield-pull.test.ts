@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AdminGraphQLClient } from "./client";
-import { PULL_METAFIELD_DEFINITIONS_QUERY } from "./client";
+import { CURRENT_APP_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "./client";
 import { pullMetafields } from "./metafield-pull";
 
 type Node = Record<string, unknown>;
@@ -26,9 +26,15 @@ function node(overrides: Node): Node {
 }
 
 /** Pages of nodes per ownerType; records the variables of every request. */
-function fakeStore(pagesByOwner: Record<string, Node[][]>) {
+function fakeStore(pagesByOwner: Record<string, Node[][]>, opts: { appId?: string | null } = {}) {
   const requests: Array<Record<string, unknown> | undefined> = [];
+  let appQueries = 0;
   const client: AdminGraphQLClient = async (query, options) => {
+    if (query === CURRENT_APP_QUERY) {
+      appQueries += 1;
+      const appId = opts.appId === undefined ? "123" : opts.appId;
+      return { data: { currentAppInstallation: appId === null ? null : { app: { id: `gid://shopify/App/${appId}` } } } };
+    }
     expect(query).toBe(PULL_METAFIELD_DEFINITIONS_QUERY);
     requests.push(options?.variables);
     const ownerType = options?.variables?.ownerType as string;
@@ -46,7 +52,7 @@ function fakeStore(pagesByOwner: Record<string, Node[][]>) {
       },
     };
   };
-  return { client, requests };
+  return { client, requests, appQueries: () => appQueries };
 }
 
 describe("pullMetafields", () => {
@@ -66,8 +72,8 @@ describe("pullMetafields", () => {
     expect(out[0]).toMatchObject({ ownerType: "PRODUCT", namespace: "custom", key: "a", type: "single_line_text_field" });
   });
 
-  it("canonicalizes app--<id> namespaces to $app (and app--<id>--<suffix> to $app:<suffix>)", async () => {
-    const { client } = fakeStore({
+  it("canonicalizes the store's own app--<id> namespaces to $app (and app--<id>--<suffix> to $app:<suffix>)", async () => {
+    const { client, appQueries } = fakeStore({
       PRODUCT: [[
         node({ namespace: "app--123", key: "careGuide" }),
         node({ namespace: "app--123--swatch", key: "color", id: "gid://shopify/MetafieldDefinition/2" }),
@@ -78,6 +84,37 @@ describe("pullMetafields", () => {
       { ownerType: "PRODUCT", namespace: "$app:swatch" },
     ]);
     expect(out.map((d) => d.namespace)).toEqual(["$app", "$app:swatch"]);
+    expect(appQueries()).toBe(1);
+  });
+
+  it("never canonicalizes another app's reserved namespace — foreign definitions stay unmanaged", async () => {
+    const { client } = fakeStore({
+      PRODUCT: [[
+        node({ namespace: "app--123", key: "careGuide" }),
+        // A third-party app's definition on the same owner type, including a
+        // same-key one that must not shadow ours.
+        node({ namespace: "app--999", key: "rating", id: "gid://shopify/MetafieldDefinition/2" }),
+        node({ namespace: "app--999", key: "careGuide", id: "gid://shopify/MetafieldDefinition/3" }),
+        node({ namespace: "app--999--swatch", key: "color", id: "gid://shopify/MetafieldDefinition/4" }),
+      ]],
+    });
+    const out = await pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "$app" }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ namespace: "$app", key: "careGuide", id: "gid://shopify/MetafieldDefinition/1" });
+  });
+
+  it("skips the app lookup when only explicit namespaces are declared", async () => {
+    const { client, appQueries } = fakeStore({ PRODUCT: [[node({ namespace: "custom", key: "a" })]] });
+    const out = await pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }]);
+    expect(out).toHaveLength(1);
+    expect(appQueries()).toBe(0);
+  });
+
+  it("refuses to manage $app pairs when the store's app id cannot be resolved", async () => {
+    const { client } = fakeStore({ PRODUCT: [[node({ namespace: "app--123", key: "a" })]] }, { appId: null });
+    await expect(pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "$app" }])).rejects.toThrow(
+      /app-reserved/i,
+    );
   });
 
   it("walks pages until hasNextPage is false", async () => {

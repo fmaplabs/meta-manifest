@@ -7,7 +7,7 @@ import type {
   MetafieldPushOpResult,
   PushOpResult,
 } from "../index";
-import { APP_NAMESPACE, metafieldOwnerKey } from "../metafields";
+import { isAppReservedNamespace, metafieldOwnerKey } from "../metafields";
 
 export function opTarget(op: DiffOp): string {
   if (op.kind === "addField") return `${op.type}.${op.field.key}`;
@@ -77,7 +77,7 @@ export function describeMetafieldOp(op: MetafieldOp): string {
   const changes = op.kind === "updateMetafield" && op.changes.length ? ` · ${op.changes.join(", ")}` : "";
   if (!isDestructiveMetafield(op)) return `${head}${changes}`;
   // Deleting inside an app-reserved namespace wipes every stored value, async. [design §6]
-  const wipes = op.namespace.startsWith(APP_NAMESPACE) ? " (deletes all stored values store-wide)" : "";
+  const wipes = isAppReservedNamespace(op.namespace) ? " (deletes all stored values store-wide)" : "";
   return `${head}${changes} · destructive${wipes}`;
 }
 

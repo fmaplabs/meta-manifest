@@ -3,6 +3,7 @@ import type { AdminGraphQLClient } from "../index";
 import {
   CREATE_DEFINITION_MUTATION,
   CREATE_METAFIELD_DEFINITION_MUTATION,
+  CURRENT_APP_QUERY,
   DELETE_METAFIELD_DEFINITION_MUTATION,
   PULL_DEFINITION_QUERY,
   PULL_ENTRY_QUERY,
@@ -48,6 +49,10 @@ function fakeStore(
       const h = options?.variables?.handle as { handle: string };
       counter += 1;
       return { data: { metaobjectUpsert: { metaobject: { id: `gid://shopify/Metaobject/${counter}`, handle: h.handle }, userErrors: [] } } };
+    }
+    if (query === CURRENT_APP_QUERY) {
+      calls.push("currentApp");
+      return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/1" } } } };
     }
     if (query === PULL_METAFIELD_DEFINITIONS_QUERY) {
       calls.push("pullMetafieldDefinitions");

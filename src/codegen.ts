@@ -1,7 +1,7 @@
 import type { RemoteAccess, RemoteCapabilities, RemoteDefinition, RemoteField } from "./sync/normalize";
 import type { FieldValidation } from "./fields/base";
 import type { PulledMetafieldDefinition } from "./sync/metafield-pull";
-import { APP_NAMESPACE, metafieldOwnerKey } from "./metafields";
+import { APP_NAMESPACE, isAppReservedNamespace, metafieldOwnerKey } from "./metafields";
 
 const APP_PREFIX = "$app:";
 
@@ -360,7 +360,7 @@ function pascal(s: string): string {
 /** Declarable, non-default access options for a metafield wrapper, or "". */
 function metafieldAccessSource(def: PulledMetafieldDefinition): string {
   const parts: string[] = [];
-  if (def.namespace.startsWith(APP_NAMESPACE) && def.access?.admin === "MERCHANT_READ_WRITE") {
+  if (isAppReservedNamespace(def.namespace) && def.access?.admin === "MERCHANT_READ_WRITE") {
     parts.push(`admin: "merchant_read_write"`);
   }
   if (def.access?.storefront === "PUBLIC_READ") parts.push(`storefront: "public_read"`);

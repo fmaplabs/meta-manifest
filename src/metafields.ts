@@ -12,6 +12,11 @@ export type { Infer, InferInput } from "./infer";
  */
 export const APP_NAMESPACE = "$app";
 
+/** Whether a namespace addresses the app-reserved space: `$app` or a `$app:<suffix>` sub-namespace. */
+export function isAppReservedNamespace(namespace: string): boolean {
+  return namespace === APP_NAMESPACE || namespace.startsWith(`${APP_NAMESPACE}:`);
+}
+
 /** camelCase owner → `MetafieldOwnerType` enum value (Admin API 2026-07). [design §3] */
 export const METAFIELD_OWNER_TYPES = {
   product: "PRODUCT",
@@ -131,7 +136,7 @@ function isWrapper(entry: MetafieldEntry): entry is { field: AnyField } & Metafi
 }
 
 /** Author-time checks for one entry's metafield options. [design §9] */
-function validateOptions(owner: MetafieldOwner, namespace: string, scope: string | undefined, key: string, field: AnyField, opts: MetafieldOptions): void {
+function validateOptions(owner: MetafieldOwner, namespace: string, key: string, field: AnyField, opts: MetafieldOptions): void {
   if (opts.capabilities?.smartCollectionCondition && owner !== "product") {
     throw new Error(`Metafield "${key}": capabilities.smartCollectionCondition is only valid on the "product" owner (got "${owner}").`);
   }
@@ -140,10 +145,9 @@ function validateOptions(owner: MetafieldOwner, namespace: string, scope: string
       `Metafield "${key}": the builder sets filterable: true but capabilities.adminFilterable is false — they must agree.`,
     );
   }
-  if (opts.access?.admin != null && (namespace !== APP_NAMESPACE || scope === "merchant")) {
+  if (opts.access?.admin != null && !isAppReservedNamespace(namespace)) {
     throw new Error(
-      `Metafield "${key}": access.admin is only valid for app-reserved-namespace definitions ` +
-        `(namespace "${namespace}"${scope === "merchant" ? `, merchant scope` : ""}).`,
+      `Metafield "${key}": access.admin is only valid for app-reserved-namespace definitions (namespace "${namespace}").`,
     );
   }
 }
@@ -159,13 +163,17 @@ export function defineMetafields<F extends Record<string, unknown>>(
   if (ownerType === undefined) {
     throw new Error(`Unknown metafield owner "${String(owner)}". Valid owners: ${Object.keys(METAFIELD_OWNER_TYPES).join(", ")}.`);
   }
-  const namespace = config.namespace ?? APP_NAMESPACE;
+  // A per-set merchant scope resolves the `$app` sentinel here, so `encode`,
+  // validation, and duplicate detection all see the real "custom" namespace; a
+  // merchant `config.scope` is only visible at sync time (resolve). [design §6]
+  const declared = config.namespace ?? APP_NAMESPACE;
+  const namespace = declared === APP_NAMESPACE && config.scope === "merchant" ? "custom" : declared;
 
   const fields: Record<string, AnyField> = {};
   const options: Record<string, MetafieldOptions> = {};
   for (const [key, raw] of Object.entries(config.fields as Record<string, MetafieldEntry>)) {
     const { field, opts } = isWrapper(raw) ? (({ field: f, ...rest }) => ({ field: f, opts: rest }))(raw) : { field: raw, opts: {} };
-    validateOptions(owner, namespace, config.scope, key, field, opts);
+    validateOptions(owner, namespace, key, field, opts);
     fields[key] = field;
     options[key] = opts;
   }

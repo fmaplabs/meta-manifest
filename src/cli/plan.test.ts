@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AdminGraphQLClient } from "../index";
-import { PULL_DEFINITION_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
+import { CURRENT_APP_QUERY, PULL_DEFINITION_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
 import { defineMetafields, defineMetaobject, m } from "../index";
 import { planFor, planMetafieldsFor } from "./plan";
 
@@ -110,6 +110,9 @@ describe("planMetafieldsFor", () => {
 
   it("plans a create for a declared metafield absent remotely", async () => {
     const client: AdminGraphQLClient = async (query) => {
+      if (query === CURRENT_APP_QUERY) {
+        return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/1" } } } };
+      }
       expect(query).toBe(PULL_METAFIELD_DEFINITIONS_QUERY);
       return { data: { metafieldDefinitions: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } };
     };
@@ -120,9 +123,14 @@ describe("planMetafieldsFor", () => {
   });
 
   it("rewrites pulled GID-form reference validations to type-form before diffing", async () => {
-    const client: AdminGraphQLClient = async () => ({
-      data: { metafieldDefinitions: { nodes: [metafieldNode()], pageInfo: { hasNextPage: false, endCursor: null } } },
-    });
+    const client: AdminGraphQLClient = async (query) => {
+      if (query === CURRENT_APP_QUERY) {
+        return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/1" } } } };
+      }
+      return {
+        data: { metafieldDefinitions: { nodes: [metafieldNode()], pageInfo: { hasNextPage: false, endCursor: null } } },
+      };
+    };
     const set = defineMetafields("product", { fields: { author: m.ref(A) } });
     const typeById = new Map([["gid://shopify/MetaobjectDefinition/7", "$app:a"]]);
     const { plan } = await planMetafieldsFor(client, [set], [A], {}, { metaobjectTypeById: typeById });

@@ -4,11 +4,14 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AdminGraphQLClient } from "../index";
 import { defineMetafields, m } from "../index";
-import { LIST_DEFINITIONS_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
+import { CURRENT_APP_QUERY, LIST_DEFINITIONS_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
 import { runPull } from "./pull";
 
 function fakeStore(): AdminGraphQLClient {
   return async (query) => {
+    if (query === CURRENT_APP_QUERY) {
+      return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/111" } } } };
+    }
     if (query === PULL_METAFIELD_DEFINITIONS_QUERY) {
       return { data: { metafieldDefinitions: {
         nodes: [{

@@ -310,6 +310,10 @@ Two notes:
 
 - **`required` is local-typing-only** for metafields: Shopify metafield definitions have no
   required concept, so `required: true` affects `Infer`/`encode`/`parse` but never the diff.
+  Also note `encode()` resolves the default namespace from the **set's own** declaration
+  (per-set `scope: "merchant"` → `custom`); a project that relies on a merchant `scope` in
+  the *config* should declare `namespace: "custom"` (or a per-set scope) explicitly so
+  `encode`'d values land under the synced definitions.
 - **Positioning:** a *distributed* app should usually declare its metafield definitions in
   `shopify.app.toml` and let Shopify deploy them. meta-manifest's GraphQL sync targets
   custom-app and merchant-store tooling — and covers what the TOML can't: merchant-scope

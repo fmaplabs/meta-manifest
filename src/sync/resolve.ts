@@ -2,7 +2,7 @@ import type { Config } from "../config";
 import type { MetaobjectSchema } from "../define";
 import type { Field, FieldValidation } from "../fields/base";
 import type { FieldDefinitionInput, MetaobjectDefinitionInput } from "../definition-input";
-import { APP_NAMESPACE, type AnyMetafieldSet, type MetafieldOwnerType } from "../metafields";
+import { APP_NAMESPACE, isAppReservedNamespace, type AnyMetafieldSet, type MetafieldOwnerType } from "../metafields";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySchema = MetaobjectSchema<any>;
@@ -182,7 +182,7 @@ export function resolveMetafieldSets(
       const opts = set.options[key] ?? {};
       // Re-check under the *effective* namespace: define-time validation can't
       // see a merchant `config.scope` driving the default to "custom". [design §9]
-      if (opts.access?.admin != null && !namespace.startsWith(APP_NAMESPACE)) {
+      if (opts.access?.admin != null && !isAppReservedNamespace(namespace)) {
         throw new Error(
           `Metafield "${key}": access.admin is only valid for app-reserved-namespace definitions (namespace "${namespace}").`,
         );

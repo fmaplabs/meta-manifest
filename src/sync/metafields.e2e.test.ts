@@ -4,6 +4,7 @@ import { runDiff } from "../cli/diff";
 import { runPush } from "../cli/push";
 import {
   CREATE_METAFIELD_DEFINITION_MUTATION,
+  CURRENT_APP_QUERY,
   DELETE_METAFIELD_DEFINITION_MUTATION,
   PULL_DEFINITION_QUERY,
   PULL_METAFIELD_DEFINITIONS_QUERY,
@@ -35,6 +36,9 @@ function fakeStore() {
   const client: AdminGraphQLClient = async (query, options) => {
     const variables = options?.variables ?? {};
     if (query === PULL_DEFINITION_QUERY) return { data: { metaobjectDefinitionByType: null } };
+    if (query === CURRENT_APP_QUERY) {
+      return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/777" } } } };
+    }
     if (query === PULL_METAFIELD_DEFINITIONS_QUERY) {
       const nodes = [...stored.values()].map((d) => ({
         id: d.id,

@@ -102,6 +102,16 @@ export const UPSERT_ENTRY_MUTATION = `mutation UpsertMetaobjectEntry($handle: Me
 // unresolved filter would plan spurious creates and destructive removes —
 // callers filter the canonicalized nodes to the declared pairs instead. [design §7, §8]
 
+// The store's resolved app-reserved namespace is `app--<app id>`, and OTHER
+// apps' definitions appear under their own `app--<id>` namespaces — only the
+// current app's may canonicalize to `$app`, so pulls that manage an
+// app-reserved pair first resolve the current app id. [design §6]
+export const CURRENT_APP_QUERY = `query CurrentAppReservedNamespace {
+  currentAppInstallation {
+    app { id }
+  }
+}`;
+
 export const PULL_METAFIELD_DEFINITIONS_QUERY = `query PullMetafieldDefinitions($ownerType: MetafieldOwnerType!, $after: String) {
   metafieldDefinitions(ownerType: $ownerType, first: 50, after: $after) {
     nodes {

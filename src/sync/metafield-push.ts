@@ -1,4 +1,4 @@
-import { APP_NAMESPACE } from "../metafields";
+import { APP_NAMESPACE, isAppReservedNamespace } from "../metafields";
 import {
   CREATE_METAFIELD_DEFINITION_MUTATION,
   DELETE_METAFIELD_DEFINITION_MUTATION,
@@ -136,7 +136,7 @@ export async function pushMetafields(
       metafieldDefinitionDelete: { deletedDefinitionId?: string | null; userErrors: UserError[] };
     }>(client, DELETE_METAFIELD_DEFINITION_MUTATION, {
       id,
-      deleteAllAssociatedMetafields: op.namespace.startsWith(APP_NAMESPACE),
+      deleteAllAssociatedMetafields: isAppReservedNamespace(op.namespace),
     });
     const payload = data.metafieldDefinitionDelete;
     if (payload.userErrors.length) return { op, status: "failed", userErrors: payload.userErrors };

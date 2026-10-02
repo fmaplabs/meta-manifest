@@ -140,6 +140,43 @@ describe("defineMetafields author-time validation", () => {
       }),
     ).not.toThrow();
   });
+
+  it("allows access.admin on a $app:<suffix> sub-namespace (as mm pull can generate)", () => {
+    expect(() =>
+      defineMetafields("product", {
+        namespace: "$app:reviews",
+        fields: { a: { field: m.text(), access: { admin: "merchant_read_write" } } },
+      }),
+    ).not.toThrow();
+  });
+
+  it("does not mistake a $app-prefixed non-reserved namespace for app-reserved", () => {
+    expect(() =>
+      defineMetafields("product", {
+        namespace: "$apple",
+        fields: { a: { field: m.text(), access: { admin: "merchant_read" } } },
+      }),
+    ).toThrow(/access\.admin/);
+  });
+});
+
+describe("defineMetafields with per-set merchant scope", () => {
+  it("resolves the namespace sentinel to custom at define time", () => {
+    const set = defineMetafields("product", { scope: "merchant", fields: { a: m.text() } });
+    expect(set.namespace).toBe("custom");
+  });
+
+  it("encodes merchant-set values with the custom namespace", () => {
+    const set = defineMetafields("product", { scope: "merchant", fields: { a: m.text() } });
+    expect(set.encode({ a: "x" })).toEqual([
+      { key: "a", value: "x", type: "single_line_text_field", namespace: "custom" },
+    ]);
+  });
+
+  it("treats an explicit $app namespace as the sentinel under per-set merchant scope", () => {
+    const set = defineMetafields("product", { namespace: "$app", scope: "merchant", fields: { a: m.text() } });
+    expect(set.namespace).toBe("custom");
+  });
 });
 
 describe("isMetafieldSet", () => {
