@@ -3,7 +3,8 @@ import { createJiti } from "jiti";
 import { validateConfig } from "../config";
 import type { Config } from "../config";
 import { isMetaobjectSchema } from "../define";
-import type { AnyEntries, AnySchema } from "../index";
+import { isMetafieldSet } from "../metafields";
+import type { AnyEntries, AnyMetafieldSet, AnySchema } from "../index";
 
 const jiti = createJiti(import.meta.url);
 
@@ -80,4 +81,39 @@ export async function loadEntries(entriesPath: string): Promise<AnyEntries[]> {
     }
   });
   return mod.entries as AnyEntries[];
+}
+
+/**
+ * Load the `metafields` export (an array of `defineMetafields(...)` sets) from the main
+ * metafields module. Duplicate `(ownerType, namespace, key)` across all sets is rejected
+ * here, on the declared namespace (the `$app` sentinel included), before any network call.
+ */
+export async function loadMetafields(metafieldsPath: string): Promise<AnyMetafieldSet[]> {
+  const abs = resolve(process.cwd(), metafieldsPath);
+  const mod = await jiti.import<{ metafields?: unknown }>(abs);
+  if (!Array.isArray(mod.metafields)) {
+    throw new Error(`Metafields module "${metafieldsPath}" must export a \`metafields\` array.`);
+  }
+  const seen = new Map<string, number>();
+  mod.metafields.forEach((set, i) => {
+    if (!isMetafieldSet(set)) {
+      throw new Error(
+        `metafields[${i}] in "${metafieldsPath}" is not a metafield set (got ${describeValue(set)}). ` +
+          `Each metafields module must \`export default defineMetafields(...)\`; import it into the main ` +
+          `metafields module and list it in \`metafields\`.`,
+      );
+    }
+    for (const key of Object.keys(set.fields as Record<string, unknown>)) {
+      const identity = `${set.owner}.${set.namespace}.${key}`;
+      const first = seen.get(identity);
+      if (first !== undefined) {
+        throw new Error(
+          `Duplicate metafield "${identity}" in "${metafieldsPath}" — ` +
+            `metafields[${first}] and metafields[${i}] both declare it.`,
+        );
+      }
+      seen.set(identity, i);
+    }
+  });
+  return mod.metafields as AnyMetafieldSet[];
 }

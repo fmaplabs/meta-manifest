@@ -141,6 +141,27 @@ function effectiveNamespace(namespace: string, scope: Scope): string {
 }
 
 /**
+ * The effective `(ownerType, namespace)` pairs the given sets declare — the unit
+ * pull fetches and diff bounds removes to. Derived from the sets (not resolved
+ * definitions) so a declared-but-empty set still counts as managed. [design §8]
+ */
+export function metafieldPairs(
+  sets: AnyMetafieldSet[],
+  config: ScopeConfig = {},
+): Array<{ ownerType: MetafieldOwnerType; namespace: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ ownerType: MetafieldOwnerType; namespace: string }> = [];
+  for (const set of sets) {
+    const namespace = effectiveNamespace(set.namespace, set.scope ?? config.scope ?? "app");
+    const key = `${set.owner}/${namespace}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ownerType: set.owner, namespace });
+  }
+  return out;
+}
+
+/**
  * Resolve declared metafield sets into the flat per-definition shape diff/push
  * consume. Reference validations are rewritten against the metaobject schemas'
  * effective types — the same rewrite `resolveDefinitions` applies. [design §6]

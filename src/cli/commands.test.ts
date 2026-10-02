@@ -1,16 +1,28 @@
 import { describe, it, expect } from "vitest";
 import type { AdminGraphQLClient } from "../index";
-import { CREATE_DEFINITION_MUTATION, PULL_DEFINITION_QUERY, PULL_ENTRY_QUERY, UPSERT_ENTRY_MUTATION } from "../sync/client";
-import { defineEntries, defineMetaobject, m } from "../index";
+import {
+  CREATE_DEFINITION_MUTATION,
+  CREATE_METAFIELD_DEFINITION_MUTATION,
+  DELETE_METAFIELD_DEFINITION_MUTATION,
+  PULL_DEFINITION_QUERY,
+  PULL_ENTRY_QUERY,
+  PULL_METAFIELD_DEFINITIONS_QUERY,
+  UPSERT_ENTRY_MUTATION,
+} from "../sync/client";
+import { defineEntries, defineMetafields, defineMetaobject, m } from "../index";
 import { runDiff } from "./diff";
 import { runPush } from "./push";
 
 const A = defineMetaobject("a", { name: "A", fields: { n: m.text({ required: true }) } });
 const E = defineEntries(A, { one: { n: "1" } });
+const MF = defineMetafields("product", { fields: { careGuide: m.text() } });
 
-function fakeStore(opts: { failCreateDefinition?: boolean } = {}): { client: AdminGraphQLClient; calls: string[] } {
+function fakeStore(
+  opts: { failCreateDefinition?: boolean; remoteMetafieldNodes?: Array<Record<string, unknown>> } = {},
+): { client: AdminGraphQLClient; calls: string[]; payloads: Record<string, unknown[]> } {
   let counter = 0;
   const calls: string[] = [];
+  const payloads: Record<string, unknown[]> = { createMetafieldDefinition: [], deleteMetafieldDefinition: [] };
   const client: AdminGraphQLClient = async (query, options) => {
     if (query === PULL_DEFINITION_QUERY) {
       calls.push("pullDefinition");
@@ -37,9 +49,48 @@ function fakeStore(opts: { failCreateDefinition?: boolean } = {}): { client: Adm
       counter += 1;
       return { data: { metaobjectUpsert: { metaobject: { id: `gid://shopify/Metaobject/${counter}`, handle: h.handle }, userErrors: [] } } };
     }
+    if (query === PULL_METAFIELD_DEFINITIONS_QUERY) {
+      calls.push("pullMetafieldDefinitions");
+      return { data: { metafieldDefinitions: {
+        nodes: opts.remoteMetafieldNodes ?? [],
+        pageInfo: { hasNextPage: false, endCursor: null } } } };
+    }
+    if (query === CREATE_METAFIELD_DEFINITION_MUTATION) {
+      calls.push("createMetafieldDefinition");
+      payloads.createMetafieldDefinition.push(options?.variables?.definition);
+      counter += 1;
+      return { data: { metafieldDefinitionCreate: {
+        createdDefinition: { id: `gid://shopify/MetafieldDefinition/${counter}` },
+        userErrors: [] } } };
+    }
+    if (query === DELETE_METAFIELD_DEFINITION_MUTATION) {
+      calls.push("deleteMetafieldDefinition");
+      payloads.deleteMetafieldDefinition.push(options?.variables);
+      return { data: { metafieldDefinitionDelete: { deletedDefinitionId: options?.variables?.id, userErrors: [] } } };
+    }
     return { data: {} };
   };
-  return { client, calls };
+  return { client, calls, payloads };
+}
+
+function remoteMetafieldNode(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "gid://shopify/MetafieldDefinition/50",
+    name: "legacy",
+    namespace: "app--1",
+    key: "legacy",
+    description: null,
+    type: { name: "single_line_text_field" },
+    validations: [],
+    access: { admin: "MERCHANT_READ", storefront: null, customerAccount: null },
+    capabilities: {
+      adminFilterable: { enabled: false },
+      smartCollectionCondition: { enabled: false },
+      uniqueValues: { enabled: false },
+    },
+    pinnedPosition: null,
+    ...overrides,
+  };
 }
 
 describe("runDiff / runPush", () => {
@@ -90,5 +141,51 @@ describe("runDiff / runPush", () => {
     const bad = defineEntries(A, { "Bad Handle": { n: "x" } });
     await expect(runPush({ client, schemas: [A], entries: [bad] })).rejects.toThrow(/Entry validation failed/);
     expect(calls).toEqual([]);
+  });
+});
+
+describe("runDiff / runPush with metafields", () => {
+  it("runDiff returns the metafield plan alongside definitions", async () => {
+    const { client } = fakeStore();
+    const { definitions, metafields } = await runDiff({ client, schemas: [A], metafields: [MF] });
+    expect(definitions.map((op) => op.kind)).toEqual(["createDefinition"]);
+    expect(metafields).toEqual([{ kind: "createMetafield", ownerType: "PRODUCT", namespace: "$app", key: "careGuide" }]);
+  });
+
+  it("runPush pushes metafields after metaobject definitions and before entries", async () => {
+    const { client, calls } = fakeStore();
+    const result = await runPush({ client, schemas: [A], entries: [E], metafields: [MF] });
+    expect(result.ok).toBe(true);
+    expect(result.metafields?.counts).toEqual({ applied: 1, skipped: 0, blocked: 0, failed: 0 });
+    expect(calls.indexOf("createMetafieldDefinition")).toBeGreaterThan(calls.indexOf("createDefinition"));
+    expect(calls.indexOf("upsertEntry")).toBeGreaterThan(calls.indexOf("createMetafieldDefinition"));
+  });
+
+  it("runPush threads ids of metaobject definitions created this run into metafield ref payloads", async () => {
+    const { client, payloads } = fakeStore();
+    const Merchant = defineMetaobject("author", { name: "Author", scope: "merchant", fields: { n: m.text() } });
+    const RefSet = defineMetafields("product", { fields: { author: m.ref(Merchant) } });
+    await runPush({ client, schemas: [Merchant], metafields: [RefSet] });
+    expect((payloads.createMetafieldDefinition[0] as { validations: unknown }).validations).toEqual([
+      { name: "metaobject_definition_id", value: "gid://shopify/MetaobjectDefinition/1" },
+    ]);
+  });
+
+  it("runPush gates destructive metafield ops behind allowDestructive and stays ok", async () => {
+    const { client, calls } = fakeStore({ remoteMetafieldNodes: [remoteMetafieldNode()] });
+    const result = await runPush({ client, schemas: [A], metafields: [MF] });
+    expect(result.ok).toBe(true);
+    expect(result.metafields?.counts.skipped).toBe(1);
+    expect(calls).not.toContain("deleteMetafieldDefinition");
+  });
+
+  it("runPush applies destructive metafield removes with allowDestructive", async () => {
+    const { client, payloads } = fakeStore({ remoteMetafieldNodes: [remoteMetafieldNode()] });
+    const result = await runPush({ client, schemas: [A], metafields: [MF], allowDestructive: true });
+    expect(result.ok).toBe(true);
+    expect(payloads.deleteMetafieldDefinition[0]).toEqual({
+      id: "gid://shopify/MetafieldDefinition/50",
+      deleteAllAssociatedMetafields: true,
+    });
   });
 });

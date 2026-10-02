@@ -26,4 +26,12 @@ describe("config", () => {
     expect(() => validateConfig({ ...base, entries: 42 })).toThrow(/entries/);
     expect(() => validateConfig({ ...base, entries: "" })).toThrow(/entries/);
   });
+
+  it("validateConfig accepts a valid metafields path and rejects a non-string one", () => {
+    const base = { shop: "s", accessToken: "t", schema: "./s.ts" };
+    expect(validateConfig({ ...base, metafields: "./m.ts" }).metafields).toBe("./m.ts");
+    expect(validateConfig(base).metafields).toBeUndefined();
+    expect(() => validateConfig({ ...base, metafields: 42 })).toThrow(/metafields/);
+    expect(() => validateConfig({ ...base, metafields: "" })).toThrow(/metafields/);
+  });
 });

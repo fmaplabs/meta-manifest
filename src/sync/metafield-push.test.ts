@@ -208,3 +208,21 @@ describe("pushMetafields — destructive gating", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("pushMetafields — metaobject reference targets", () => {
+  it("rewrites merchant-scope ref validations to GID form via metaobjectIdsByType", async () => {
+    const { client, calls } = fakeStore();
+    const def = local({
+      type: "metaobject_reference",
+      validations: [{ name: "metaobject_definition_type", value: "author" }],
+    });
+    await pushMetafields(client, [createOp], {
+      definitions: [def],
+      remote: [],
+      metaobjectIdsByType: new Map([["author", "gid://shopify/MetaobjectDefinition/42"]]),
+    });
+    expect((calls[0].variables.definition as { validations: unknown }).validations).toEqual([
+      { name: "metaobject_definition_id", value: "gid://shopify/MetaobjectDefinition/42" },
+    ]);
+  });
+});

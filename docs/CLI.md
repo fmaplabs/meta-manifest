@@ -42,6 +42,25 @@ need an access token with the right scopes:
 When `entries` is set in the config (seed-entry sync), `diff` additionally needs
 `read_metaobjects` and `push` needs `write_metaobjects`.
 
+When `metafields` is set in the config (metafield-definition sync), the token
+needs the **owner resource's** scopes for every owner type you declare — there is
+no metafield-specific scope. `diff` needs the read scope, `push` the write scope:
+
+| Declared owner                                  | `diff` needs     | `push` needs      |
+| ----------------------------------------------- | ---------------- | ----------------- |
+| `product`, `productVariant`, `collection`        | `read_products`  | `write_products`  |
+| `customer`                                       | `read_customers` | `write_customers` |
+| `order`, `draftOrder`                            | `read_orders`    | `write_orders`    |
+| `company`, `companyLocation`                     | `read_companies` | `write_companies` |
+| other owners                                     | that resource's `read_*` | that resource's `write_*` |
+
+> **Warning — a missing read scope is silent.** Shopify returns an **empty**
+> `metafieldDefinitions` connection instead of an error when the token lacks the
+> owner's read scope. A diff would then plan to re-create every declared
+> definition (and, with `--allow-destructive`, plan removes). If a first `diff`
+> against a configured store unexpectedly reports only creates, verify the
+> token's scopes before pushing.
+
 The simplest way to get one is a **custom app** created in the store's admin
 (**Settings → Apps and sales channels → Develop apps**), which issues an Admin
 API access token you grant the scopes above. See Shopify's

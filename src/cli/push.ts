@@ -1,11 +1,27 @@
-import type { AdminGraphQLClient, AnyEntries, EntryPushResult, PushResult, ScopeConfig } from "../index";
+import type {
+  AdminGraphQLClient,
+  AnyEntries,
+  AnyMetafieldSet,
+  EntryPushResult,
+  MetafieldPushResult,
+  PushResult,
+  ScopeConfig,
+} from "../index";
 import type { AnySchema } from "../index";
-import { push, pushEntries, resolveEntries } from "../index";
-import { planEntriesFor, planFor } from "./plan";
-import { describeEntryResult, describeIssues, describeResult, isDestructive } from "./format";
+import { push, pushEntries, pushMetafields, resolveEntries } from "../index";
+import { planEntriesFor, planFor, planMetafieldsFor } from "./plan";
+import {
+  describeEntryResult,
+  describeIssues,
+  describeMetafieldResult,
+  describeResult,
+  isDestructive,
+  isDestructiveMetafield,
+} from "./format";
 
 export interface RunPushResult {
   definitions: PushResult;
+  metafields?: MetafieldPushResult;
   entries?: EntryPushResult;
   ok: boolean;
 }
@@ -14,6 +30,7 @@ export async function runPush(args: {
   client: AdminGraphQLClient;
   schemas: AnySchema[];
   entries?: AnyEntries[];
+  metafields?: AnyMetafieldSet[];
   config?: ScopeConfig;
   allowDestructive?: boolean;
 }): Promise<RunPushResult> {
@@ -33,7 +50,41 @@ export async function runPush(args: {
     `applied ${result.counts.applied} · skipped ${result.counts.skipped} · ` +
       `blocked ${result.counts.blocked} · failed ${result.counts.failed}`,
   );
-  if (!args.allowDestructive && plan.some(isDestructive)) {
+
+  let destructiveSkipped = !args.allowDestructive && plan.some(isDestructive);
+
+  // Metafield definitions push after metaobject creates (a metaobject_reference
+  // metafield needs its target definition) and before entries. [design §2.7]
+  let metafieldsResult: MetafieldPushResult | undefined;
+  if (args.metafields) {
+    // Metaobject ids: pulled ones plus those created this run, for ref-target
+    // GID rewriting both ways (pulled validations → type canon, payloads → GIDs).
+    const metaobjectTypeById = new Map(remote.map((r) => [r.id, r.type]));
+    const metaobjectIdsByType = new Map(remote.map((r) => [r.type, r.id]));
+    for (const r of result.results) {
+      if (r.op.kind === "createDefinition" && r.status === "applied" && r.id) {
+        metaobjectTypeById.set(r.id, r.op.type);
+        metaobjectIdsByType.set(r.op.type, r.id);
+      }
+    }
+    const metafieldPlan = await planMetafieldsFor(args.client, args.metafields, args.schemas, args.config, {
+      metaobjectTypeById,
+    });
+    metafieldsResult = await pushMetafields(
+      args.client,
+      metafieldPlan.plan,
+      { definitions: metafieldPlan.definitions, remote: metafieldPlan.remote, metaobjectIdsByType },
+      { allowDestructive: args.allowDestructive },
+    );
+    for (const r of metafieldsResult.results) console.log(`  ${describeMetafieldResult(r)}`);
+    console.log(
+      `metafields: applied ${metafieldsResult.counts.applied} · skipped ${metafieldsResult.counts.skipped} · ` +
+        `blocked ${metafieldsResult.counts.blocked} · failed ${metafieldsResult.counts.failed}`,
+    );
+    destructiveSkipped ||= !args.allowDestructive && metafieldPlan.plan.some(isDestructiveMetafield);
+  }
+
+  if (destructiveSkipped) {
     console.log("Some destructive changes were skipped. Re-run with --allow-destructive to apply them.");
   }
 
@@ -61,5 +112,10 @@ export async function runPush(args: {
     );
   }
 
-  return { definitions: result, entries: entriesResult, ok: result.ok && (entriesResult?.ok ?? true) };
+  return {
+    definitions: result,
+    metafields: metafieldsResult,
+    entries: entriesResult,
+    ok: result.ok && (metafieldsResult?.ok ?? true) && (entriesResult?.ok ?? true),
+  };
 }

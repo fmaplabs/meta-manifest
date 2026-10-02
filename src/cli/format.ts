@@ -1,4 +1,13 @@
-import type { DiffOp, EntryOp, EntryPushOpResult, Issue, PushOpResult } from "../index";
+import type {
+  DiffOp,
+  EntryOp,
+  EntryPushOpResult,
+  Issue,
+  MetafieldOp,
+  MetafieldPushOpResult,
+  PushOpResult,
+} from "../index";
+import { APP_NAMESPACE, METAFIELD_OWNER_TYPES } from "../metafields";
 
 export function opTarget(op: DiffOp): string {
   if (op.kind === "addField") return `${op.type}.${op.field.key}`;
@@ -51,4 +60,39 @@ export function describeEntryResult(r: EntryPushOpResult): string {
 
 export function describeIssues(issues: Issue[]): string {
   return issues.map((i) => `  ✗ ${i.message}`).join("\n");
+}
+
+const OWNER_KEY_BY_TYPE = new Map(Object.entries(METAFIELD_OWNER_TYPES).map(([k, v]) => [v, k]));
+
+/** `product.$app.careGuide`-style identifier: camelCase owner, namespace, key. */
+export function metafieldOpTarget(op: MetafieldOp): string {
+  const owner = OWNER_KEY_BY_TYPE.get(op.ownerType) ?? op.ownerType;
+  return `${owner}.${op.namespace}.${op.key}`;
+}
+
+export function isDestructiveMetafield(op: MetafieldOp): boolean {
+  return "destructive" in op && op.destructive === true;
+}
+
+export function describeMetafieldOp(op: MetafieldOp): string {
+  const head = `${op.kind}: ${metafieldOpTarget(op)}`;
+  const changes = op.kind === "updateMetafield" && op.changes.length ? ` · ${op.changes.join(", ")}` : "";
+  if (!isDestructiveMetafield(op)) return `${head}${changes}`;
+  // Deleting inside an app-reserved namespace wipes every stored value, async. [design §6]
+  const wipes = op.namespace.startsWith(APP_NAMESPACE) ? " (deletes all stored values store-wide)" : "";
+  return `${head}${changes} · destructive${wipes}`;
+}
+
+export function describeMetafieldResult(r: MetafieldPushOpResult): string {
+  const head = `${r.op.kind}: ${metafieldOpTarget(r.op)}`;
+  switch (r.status) {
+    case "applied":
+      return `✓ applied — ${head}`;
+    case "skipped":
+      return `– skipped (${r.reason}) — ${head}`;
+    case "blocked":
+      return `⚠ blocked (${r.reason}) — ${head}`;
+    case "failed":
+      return `✗ failed (${r.userErrors.map((e) => e.message).join("; ")}) — ${head}`;
+  }
 }

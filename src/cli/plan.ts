@@ -1,16 +1,34 @@
 import type {
   AdminGraphQLClient,
   AnyEntries,
+  AnyMetafieldSet,
   DiffOp,
   EntryOp,
   Issue,
+  LocalMetafieldDefinition,
+  MetafieldOp,
   MetaobjectDefinitionInput,
   PulledEntry,
+  PulledMetafieldDefinition,
   PulledRemote,
   ResolvedEntry,
   ScopeConfig,
 } from "../index";
-import { diff, diffEntries, normalizeDefinition, normalizeRemote, pull, pullEntries, resolveDefinitions, resolveEntries } from "../index";
+import {
+  diff,
+  diffEntries,
+  diffMetafields,
+  metafieldPairs,
+  normalizeDefinition,
+  normalizeRemote,
+  pull,
+  pullEntries,
+  pullMetafields,
+  refValidationsToTypes,
+  resolveDefinitions,
+  resolveEntries,
+  resolveMetafieldSets,
+} from "../index";
 import type { AnySchema } from "../index";
 
 const APP_PREFIX = "$app:";
@@ -78,6 +96,36 @@ export async function planEntriesFor(
     .map((e) => ({ type: e.type, handle: e.handle }));
   const remote = await pullEntries(client, keys);
   return { plan: diffEntries(entries, remote), entries, remote, issues: [] };
+}
+
+export interface MetafieldPlan {
+  plan: MetafieldOp[];
+  /** Resolved local definitions — reused by `pushMetafields` to build payloads. */
+  definitions: LocalMetafieldDefinition[];
+  remote: PulledMetafieldDefinition[];
+}
+
+/**
+ * Resolve declared metafield sets, pull the declared `(ownerType, namespace)`
+ * pairs, and diff. Pulled GID-form reference validations are rewritten back to
+ * type-form via `metaobjectTypeById` (definition GID → effective type, from the
+ * metaobject plan) so they compare against the local canon. [design §7]
+ */
+export async function planMetafieldsFor(
+  client: AdminGraphQLClient,
+  sets: AnyMetafieldSet[],
+  schemas: AnySchema[],
+  config: ScopeConfig = {},
+  opts: { metaobjectTypeById?: ReadonlyMap<string, string> } = {},
+): Promise<MetafieldPlan> {
+  const definitions = resolveMetafieldSets(sets, schemas, config);
+  const pairs = metafieldPairs(sets, config);
+  const pulled = await pullMetafields(client, pairs);
+  const typeById = opts.metaobjectTypeById;
+  const remote = typeById
+    ? pulled.map((d) => ({ ...d, validations: refValidationsToTypes(d.validations, typeById) }))
+    : pulled;
+  return { plan: diffMetafields(definitions, remote, pairs), definitions, remote };
 }
 
 /** Resolve scope, pull the effective types, normalize, and diff local↔remote. */

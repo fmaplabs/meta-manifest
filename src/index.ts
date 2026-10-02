@@ -45,7 +45,7 @@ export type {
   RemoteCapabilities,
   PulledDefinition,
 } from "./sync/normalize";
-export { resolveDefinitions, resolveMetafieldSets } from "./sync/resolve";
+export { resolveDefinitions, resolveMetafieldSets, metafieldPairs } from "./sync/resolve";
 export type {
   ScopeConfig,
   Scope,

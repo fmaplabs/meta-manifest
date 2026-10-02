@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { AdminGraphQLClient } from "../index";
-import { PULL_DEFINITION_QUERY } from "../sync/client";
-import { defineMetaobject, m } from "../index";
-import { planFor } from "./plan";
+import { PULL_DEFINITION_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
+import { defineMetafields, defineMetaobject, m } from "../index";
+import { planFor, planMetafieldsFor } from "./plan";
 
 const A = defineMetaobject("a", { name: "A", fields: { n: m.text({ required: true }) } });
 
@@ -84,5 +84,48 @@ describe("planFor", () => {
     // merchantEditable:true resolves admin to MERCHANT_READ_WRITE, matching remote → no churn.
     const writable = await planFor(clientReturning("MERCHANT_READ_WRITE"), [A], { merchantEditable: true });
     expect(writable.plan).toEqual([]);
+  });
+});
+
+describe("planMetafieldsFor", () => {
+  function metafieldNode(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "gid://shopify/MetafieldDefinition/1",
+      name: "author",
+      namespace: "app--1",
+      key: "author",
+      description: null,
+      type: { name: "metaobject_reference" },
+      validations: [{ name: "metaobject_definition_id", value: "gid://shopify/MetaobjectDefinition/7" }],
+      access: { admin: "MERCHANT_READ", storefront: null, customerAccount: null },
+      capabilities: {
+        adminFilterable: { enabled: false },
+        smartCollectionCondition: { enabled: false },
+        uniqueValues: { enabled: false },
+      },
+      pinnedPosition: null,
+      ...overrides,
+    };
+  }
+
+  it("plans a create for a declared metafield absent remotely", async () => {
+    const client: AdminGraphQLClient = async (query) => {
+      expect(query).toBe(PULL_METAFIELD_DEFINITIONS_QUERY);
+      return { data: { metafieldDefinitions: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } };
+    };
+    const set = defineMetafields("product", { fields: { careGuide: m.text() } });
+    const { plan, definitions } = await planMetafieldsFor(client, [set], []);
+    expect(plan).toEqual([{ kind: "createMetafield", ownerType: "PRODUCT", namespace: "$app", key: "careGuide" }]);
+    expect(definitions[0].name).toBe("careGuide");
+  });
+
+  it("rewrites pulled GID-form reference validations to type-form before diffing", async () => {
+    const client: AdminGraphQLClient = async () => ({
+      data: { metafieldDefinitions: { nodes: [metafieldNode()], pageInfo: { hasNextPage: false, endCursor: null } } },
+    });
+    const set = defineMetafields("product", { fields: { author: m.ref(A) } });
+    const typeById = new Map([["gid://shopify/MetaobjectDefinition/7", "$app:a"]]);
+    const { plan } = await planMetafieldsFor(client, [set], [A], {}, { metaobjectTypeById: typeById });
+    expect(plan).toEqual([]);
   });
 });

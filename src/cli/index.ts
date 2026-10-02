@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { SyncTransportError } from "../sync/client";
 import { createAdminClient } from "../node/client";
-import { loadConfig, loadEntries, loadSchemas } from "./load-config";
+import { loadConfig, loadEntries, loadMetafields, loadSchemas } from "./load-config";
 import { loadDotEnv } from "./load-env";
 import { runInit } from "./init";
 import { runDiff } from "./diff";
@@ -39,8 +39,10 @@ Commands:
   diff                 Show the changes a push would apply
   push                 Apply local schema to the store
 
-When \`entries\` is set in the config, diff and push also plan and upsert the
-declared seed entries (after definitions). Entries are never deleted.
+When \`metafields\` is set in the config, diff and push also reconcile the
+declared metafield definitions (after metaobject definitions, before entries).
+When \`entries\` is set, diff and push also plan and upsert the declared seed
+entries (after definitions). Entries are never deleted.
 
 Options:
   --config <path>      Config file (default: meta-manifest.config.ts)
@@ -68,12 +70,13 @@ export async function main(argv: string[]): Promise<number> {
     }
     const schemas = await loadSchemas(config.schema);
     const entries = config.entries ? await loadEntries(config.entries) : undefined;
+    const metafields = config.metafields ? await loadMetafields(config.metafields) : undefined;
     if (args.command === "diff") {
-      await runDiff({ client, schemas, entries, config });
+      await runDiff({ client, schemas, entries, metafields, config });
       return 0;
     }
     if (args.command === "push") {
-      const result = await runPush({ client, schemas, entries, config, allowDestructive: args.allowDestructive });
+      const result = await runPush({ client, schemas, entries, metafields, config, allowDestructive: args.allowDestructive });
       return result.ok ? 0 : 2;
     }
     console.error(`Unknown command: ${args.command}`);

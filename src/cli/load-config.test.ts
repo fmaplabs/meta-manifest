@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadConfig, loadEntries, loadSchemas } from "./load-config";
+import { loadConfig, loadEntries, loadMetafields, loadSchemas } from "./load-config";
 
 function tmp(name: string, contents: string): string {
   const dir = mkdtempSync(join(tmpdir(), "mm-load-"));
@@ -121,5 +121,49 @@ describe("loadConfig / loadSchemas", () => {
         export const entries = [missing];`,
     });
     await expect(loadEntries(join(dir, "entries.ts"))).rejects.toThrow(/entries\[0\].*export default/s);
+  });
+
+  it("loads the metafields array from a metafields module", async () => {
+    const file = tmp("metafields.ts",
+      `import { defineMetafields, m } from ${idx};
+       export const metafields = [defineMetafields("product", { fields: { a: m.text() } })];`);
+    const sets = await loadMetafields(file);
+    expect(sets).toHaveLength(1);
+    expect(sets[0].owner).toBe("PRODUCT");
+  });
+
+  it("throws when a metafields module lacks the metafields export", async () => {
+    const file = tmp("metafields.ts", `export const nope = [];`);
+    await expect(loadMetafields(file)).rejects.toThrow(/metafields.*array/);
+  });
+
+  it("names the element and hints at the default-export convention when a metafields import is undefined", async () => {
+    const dir = tmpDir({
+      "metafields.ts": `const missing = undefined;
+        export const metafields = [missing];`,
+    });
+    await expect(loadMetafields(join(dir, "metafields.ts"))).rejects.toThrow(/metafields\[0\].*export default/s);
+  });
+
+  it("rejects duplicate (ownerType, namespace, key) across sets", async () => {
+    const file = tmp("metafields.ts",
+      `import { defineMetafields, m } from ${idx};
+       export const metafields = [
+         defineMetafields("product", { fields: { color: m.color() } }),
+         defineMetafields("product", { namespace: "$app", fields: { color: m.text() } }),
+       ];`);
+    await expect(loadMetafields(file)).rejects.toThrow(/Duplicate metafield .*PRODUCT.*\$app.*color/);
+  });
+
+  it("allows the same key on different owners or namespaces", async () => {
+    const file = tmp("metafields.ts",
+      `import { defineMetafields, m } from ${idx};
+       export const metafields = [
+         defineMetafields("product", { fields: { color: m.color() } }),
+         defineMetafields("product", { namespace: "theme", fields: { color: m.color() } }),
+         defineMetafields("customer", { fields: { color: m.color() } }),
+       ];`);
+    const sets = await loadMetafields(file);
+    expect(sets).toHaveLength(3);
   });
 });

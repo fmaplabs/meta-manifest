@@ -8,6 +8,7 @@ import {
 } from "./client";
 import type { MetafieldChange, MetafieldOp } from "./metafield-diff";
 import type { PulledMetafieldDefinition } from "./metafield-pull";
+import { refValidationsToIds } from "./ref-validations";
 import type { LocalMetafieldDefinition, MetafieldCapabilities } from "./resolve";
 
 export interface MetafieldPushOptions {
@@ -100,12 +101,23 @@ function updateInput(
 export async function pushMetafields(
   client: AdminGraphQLClient,
   plan: MetafieldOp[],
-  sources: { definitions: LocalMetafieldDefinition[]; remote: PulledMetafieldDefinition[] },
+  sources: {
+    definitions: LocalMetafieldDefinition[];
+    remote: PulledMetafieldDefinition[];
+    /** Metaobject type → definition GID (pulled + created this run), for merchant-scope ref targets. */
+    metaobjectIdsByType?: ReadonlyMap<string, string>;
+  },
   options?: MetafieldPushOptions,
 ): Promise<MetafieldPushResult> {
   const allowDestructive = options?.allowDestructive ?? false;
   const keyOf = (d: { ownerType: string; namespace: string; key: string }) => `${d.ownerType}/${d.namespace}/${d.key}`;
-  const defByKey = new Map(sources.definitions.map((d) => [keyOf(d), d]));
+  const idsByType = sources.metaobjectIdsByType ?? new Map<string, string>();
+  // Merchant-scope reference targets must be GID-form at the store boundary (see ref-validations.ts).
+  const withRefIds = (def: LocalMetafieldDefinition): LocalMetafieldDefinition => ({
+    ...def,
+    validations: refValidationsToIds(def.validations, idsByType),
+  });
+  const defByKey = new Map(sources.definitions.map((d) => [keyOf(d), withRefIds(d)]));
   const remoteByKey = new Map(sources.remote.map((d) => [keyOf(d), d]));
 
   async function create(op: MetafieldOp, def: LocalMetafieldDefinition): Promise<MetafieldPushOpResult> {
