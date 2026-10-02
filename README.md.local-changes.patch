@@ -1,0 +1,27 @@
+diff --git a/README.md b/README.md
+index 03cf2da..90fc303 100644
+--- a/README.md
++++ b/README.md
+@@ -101,7 +101,8 @@ export const Author = defineMetaobject("author", {
+ 
+ | Option | Maps to | Notes |
+ | --- | --- | --- |
+-| `scope` (config or per-metaobject) | app (`$app:<handle>`) vs merchant (`<handle>`) `type` | default `"app"`; resolved at sync time — `Author.type` stays `"$app:author"` |
++| `scope` (config or per-metaobject) | app (`$app:<handle>`) vs merchant (`<handle>`) `type` | default `"app"`; resolved
++at sync time — `Author.type` stays `"$app:author"` |
+ | `merchantEditable` (config) | `access.admin` default | `false` → `merchant_read`, `true` → `merchant_read_write` (app scope only) |
+ | `access.admin` | `access.admin` | per-metaobject override; invalid on merchant scope |
+ | `access.storefront` | `access.storefront` | Storefront API access |
+@@ -266,8 +267,10 @@ is configured, it additionally needs `read_metaobjects` for `diff` and `write_me
+ 
+ | Command  | Behavior | Exit |
+ |----------|----------|------|
+-| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema (`src/schema.ts` aggregating `src/metaobjects/author.ts`). No network. | 0 / 1 |
+-| `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style — writes/overwrites the schema source file). | 0 / 1 |
++| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema (`src/schema.ts` aggregating
++`src/metaobjects/author.ts`). No network. | 0 / 1 |
++| `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style —
++writes/overwrites the schema source file). | 0 / 1 |
+ | `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared entries when configured). Read-only. | 0 / 1 |
+ | `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType` are skipped unless you pass `--allow-destructive`. Declared entries are upserted after definitions. | 0 / 1 / 2 |
+ 
