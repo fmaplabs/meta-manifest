@@ -5,6 +5,17 @@ export { m, Field } from "./fields/index";
 export type { DecodeResult, FieldValidation, Issue, Money, Measure, Rating, RatingInput, FileType, TypeRef } from "./fields/index";
 
 export { defineMetaobject, isMetaobjectSchema } from "./define";
+export { defineMetafields, isMetafieldSet, APP_NAMESPACE, METAFIELD_OWNER_TYPES } from "./metafields";
+export type {
+  MetafieldOwner,
+  MetafieldOwnerType,
+  MetafieldOptions,
+  MetafieldEntry,
+  MetafieldSetConfig,
+  MetafieldSet,
+  MetafieldSetInput,
+  AnyMetafieldSet,
+} from "./metafields";
 export { defineEntries, entryRef, parseEntryRef, ENTRY_REF_PREFIX } from "./entries";
 export type { EntriesDef, EntriesOptions, EntryRef, AnyEntries } from "./entries";
 export type {
