@@ -1,7 +1,8 @@
 import type { Config } from "../config";
 import type { MetaobjectSchema } from "../define";
-import type { FieldValidation } from "../fields/base";
+import type { Field, FieldValidation } from "../fields/base";
 import type { FieldDefinitionInput, MetaobjectDefinitionInput } from "../definition-input";
+import { APP_NAMESPACE, type AnyMetafieldSet, type MetafieldOwnerType } from "../metafields";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySchema = MetaobjectSchema<any>;
@@ -69,6 +70,15 @@ function resolveAdmin(out: MetaobjectDefinitionInput, handle: string, scope: Sco
   }
 }
 
+/** Canonical `$app:<handle>` → effective type for every schema, for reference rewriting. */
+function effectiveTypes(schemas: AnySchema[], config: ScopeConfig): Map<string, string> {
+  const effByCanonical = new Map<string, string>();
+  for (const s of schemas) {
+    effByCanonical.set(`${APP_PREFIX}${s.handle}`, effectiveType(s.handle, effectiveScope(s, config)));
+  }
+  return effByCanonical;
+}
+
 /**
  * Resolve each schema's canonical (`$app:`) definition input into the effective
  * input the sync pipeline pushes: definition `type` and reference targets are
@@ -77,10 +87,7 @@ function resolveAdmin(out: MetaobjectDefinitionInput, handle: string, scope: Sco
  */
 export function resolveDefinitions(schemas: AnySchema[], config: ScopeConfig = {}): MetaobjectDefinitionInput[] {
   // Pass 1: canonical `$app:<handle>` → effective type, for reference rewriting.
-  const effByCanonical = new Map<string, string>();
-  for (const s of schemas) {
-    effByCanonical.set(`${APP_PREFIX}${s.handle}`, effectiveType(s.handle, effectiveScope(s, config)));
-  }
+  const effByCanonical = effectiveTypes(schemas, config);
 
   return schemas.map((s) => {
     const scope = effectiveScope(s, config);
@@ -93,4 +100,97 @@ export function resolveDefinitions(schemas: AnySchema[], config: ScopeConfig = {
     resolveAdmin(out, s.handle, scope, config);
     return out;
   });
+}
+
+/** Normalized `{enabled}` state for every metafield capability (absent = disabled). [design §7] */
+export interface MetafieldCapabilities {
+  adminFilterable: { enabled: boolean };
+  smartCollectionCondition: { enabled: boolean };
+  uniqueValues: { enabled: boolean };
+}
+
+export interface MetafieldAccess {
+  admin?: string;
+  storefront?: string;
+  customerAccount?: string;
+}
+
+/**
+ * The comparable local shape for one metafield definition: namespace is the
+ * effective one (`$app` canonical for app-reserved), access enums are uppercased,
+ * and capabilities are materialized `{enabled}` both ways so "was on, now off"
+ * diffs correctly. [design §6, §7]
+ */
+export interface LocalMetafieldDefinition {
+  ownerType: MetafieldOwnerType;
+  namespace: string;
+  key: string;
+  type: string;
+  name: string;
+  description?: string;
+  validations: FieldValidation[];
+  access?: MetafieldAccess;
+  capabilities: MetafieldCapabilities;
+  pin: boolean;
+}
+
+/** Declared `namespace` verbatim; the bare `$app` sentinel resolves by scope. [design §6] */
+function effectiveNamespace(namespace: string, scope: Scope): string {
+  if (namespace !== APP_NAMESPACE) return namespace;
+  return scope === "merchant" ? "custom" : APP_NAMESPACE;
+}
+
+/**
+ * Resolve declared metafield sets into the flat per-definition shape diff/push
+ * consume. Reference validations are rewritten against the metaobject schemas'
+ * effective types — the same rewrite `resolveDefinitions` applies. [design §6]
+ */
+export function resolveMetafieldSets(
+  sets: AnyMetafieldSet[],
+  schemas: AnySchema[],
+  config: ScopeConfig = {},
+): LocalMetafieldDefinition[] {
+  const effByCanonical = effectiveTypes(schemas, config);
+  const out: LocalMetafieldDefinition[] = [];
+
+  for (const set of sets) {
+    const scope: Scope = set.scope ?? config.scope ?? "app";
+    const namespace = effectiveNamespace(set.namespace, scope);
+
+    for (const [key, field] of Object.entries(set.fields as Record<string, Field<unknown, unknown, boolean>>)) {
+      const opts = set.options[key] ?? {};
+      // Re-check under the *effective* namespace: define-time validation can't
+      // see a merchant `config.scope` driving the default to "custom". [design §9]
+      if (opts.access?.admin != null && !namespace.startsWith(APP_NAMESPACE)) {
+        throw new Error(
+          `Metafield "${key}": access.admin is only valid for app-reserved-namespace definitions (namespace "${namespace}").`,
+        );
+      }
+
+      const access: MetafieldAccess = {};
+      if (opts.access?.admin) access.admin = opts.access.admin.toUpperCase();
+      if (opts.access?.storefront) access.storefront = opts.access.storefront.toUpperCase();
+      if (opts.access?.customerAccount) access.customerAccount = opts.access.customerAccount.toUpperCase();
+
+      const def: LocalMetafieldDefinition = {
+        ownerType: set.owner,
+        namespace,
+        key,
+        type: field.shopifyType,
+        name: field.name ?? key,
+        validations: field.validations().map((v) => rewriteReference(v, effByCanonical)),
+        capabilities: {
+          adminFilterable: { enabled: opts.capabilities?.adminFilterable ?? field.filterable },
+          smartCollectionCondition: { enabled: opts.capabilities?.smartCollectionCondition ?? false },
+          uniqueValues: { enabled: opts.capabilities?.uniqueValues ?? false },
+        },
+        pin: opts.pin ?? false,
+      };
+      const description = opts.description ?? field.description;
+      if (description != null) def.description = description;
+      if (Object.keys(access).length) def.access = access;
+      out.push(def);
+    }
+  }
+  return out;
 }

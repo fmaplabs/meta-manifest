@@ -45,8 +45,14 @@ export type {
   RemoteCapabilities,
   PulledDefinition,
 } from "./sync/normalize";
-export { resolveDefinitions } from "./sync/resolve";
-export type { ScopeConfig, Scope } from "./sync/resolve";
+export { resolveDefinitions, resolveMetafieldSets } from "./sync/resolve";
+export type {
+  ScopeConfig,
+  Scope,
+  LocalMetafieldDefinition,
+  MetafieldAccess,
+  MetafieldCapabilities,
+} from "./sync/resolve";
 export { refValidationsToIds, refValidationsToTypes } from "./sync/ref-validations";
 
 export { pull, pullAll } from "./sync/pull";
@@ -62,6 +68,12 @@ export { diffEntries } from "./sync/entry-diff";
 export type { EntryOp } from "./sync/entry-diff";
 export { pushEntries } from "./sync/entry-push";
 export type { EntryPushResult, EntryPushOpResult } from "./sync/entry-push";
+export { pullMetafields, toCanonicalNamespace } from "./sync/metafield-pull";
+export type { MetafieldPair, PulledMetafieldDefinition } from "./sync/metafield-pull";
+export { diffMetafields } from "./sync/metafield-diff";
+export type { MetafieldOp, MetafieldChange } from "./sync/metafield-diff";
+export { pushMetafields } from "./sync/metafield-push";
+export type { MetafieldPushOptions, MetafieldPushResult, MetafieldPushOpResult } from "./sync/metafield-push";
 export { SyncTransportError } from "./sync/client";
 export type { AdminGraphQLClient } from "./sync/client";
 

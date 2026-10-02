@@ -96,6 +96,55 @@ export const UPSERT_ENTRY_MUTATION = `mutation UpsertMetaobjectEntry($handle: Me
   }
 }`;
 
+// Metafield-definition documents, schema-validated against Admin API 2026-07
+// (same drift guard as above). The query deliberately has NO `namespace:`
+// argument: `$app` resolution in that filter is undocumented, and a silently
+// unresolved filter would plan spurious creates and destructive removes —
+// callers filter the canonicalized nodes to the declared pairs instead. [design §7, §8]
+
+export const PULL_METAFIELD_DEFINITIONS_QUERY = `query PullMetafieldDefinitions($ownerType: MetafieldOwnerType!, $after: String) {
+  metafieldDefinitions(ownerType: $ownerType, first: 50, after: $after) {
+    nodes {
+      id
+      name
+      namespace
+      key
+      description
+      type { name }
+      validations { name value }
+      access { admin storefront customerAccount }
+      capabilities {
+        adminFilterable { enabled }
+        smartCollectionCondition { enabled }
+        uniqueValues { enabled }
+      }
+      pinnedPosition
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+export const CREATE_METAFIELD_DEFINITION_MUTATION = `mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+  metafieldDefinitionCreate(definition: $definition) {
+    createdDefinition { id namespace key }
+    userErrors { field message code }
+  }
+}`;
+
+export const UPDATE_METAFIELD_DEFINITION_MUTATION = `mutation UpdateMetafieldDefinition($definition: MetafieldDefinitionUpdateInput!) {
+  metafieldDefinitionUpdate(definition: $definition) {
+    updatedDefinition { id }
+    userErrors { field message code }
+  }
+}`;
+
+export const DELETE_METAFIELD_DEFINITION_MUTATION = `mutation DeleteMetafieldDefinition($id: ID!, $deleteAllAssociatedMetafields: Boolean!) {
+  metafieldDefinitionDelete(id: $id, deleteAllAssociatedMetafields: $deleteAllAssociatedMetafields) {
+    deletedDefinitionId
+    userErrors { field message code }
+  }
+}`;
+
 /**
  * Thrown when a request fails at the transport or top-level GraphQL layer —
  * distinct from per-op `userErrors`, which `push` reports as `failed` rather
