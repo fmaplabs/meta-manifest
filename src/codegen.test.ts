@@ -209,3 +209,29 @@ describe("generateSchemaSource", () => {
     expect(plan).toEqual([]);
   });
 });
+
+describe("generateSchemaSource — new builders", () => {
+  const Extras = defineMetaobject("extras", {
+    name: "Extras",
+    fields: {
+      body: m.richText(),
+      cta: m.link(),
+      owner: m.customer(),
+      lastOrder: m.order(),
+      employer: m.company(),
+      site: m.companyLocation(),
+      gallery: m.list(m.richText()),
+    },
+  });
+
+  it("maps richText, link, and the new reference builders", () => {
+    const source = generateSchemaSource([normalizeLocal(Extras)]);
+    expect(source).toContain("body: m.richText()");
+    expect(source).toContain("cta: m.link()");
+    expect(source).toContain("owner: m.customer()");
+    expect(source).toContain("lastOrder: m.order()");
+    expect(source).toContain("employer: m.company()");
+    expect(source).toContain("site: m.companyLocation()");
+    expect(source).toContain("gallery: m.list(m.richText())");
+  });
+});

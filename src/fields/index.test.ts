@@ -1,12 +1,13 @@
 import { expect, it } from "vitest";
 import { m } from "./index";
 
-it("exposes the full v1 builder surface", () => {
+it("exposes the full builder surface", () => {
   const expected = [
-    "text", "multilineText", "integer", "decimal", "boolean",
-    "date", "dateTime", "url", "color", "json",
+    "text", "multilineText", "richText", "integer", "decimal", "boolean",
+    "date", "dateTime", "url", "color", "json", "link",
     "money", "dimension", "weight", "volume", "rating",
-    "product", "variant", "collection", "page", "file", "ref", "mixedRef", "list",
+    "product", "variant", "collection", "page", "file",
+    "customer", "order", "company", "companyLocation", "ref", "mixedRef", "list",
   ];
   expect(Object.keys(m).sort()).toEqual([...expected].sort());
 });

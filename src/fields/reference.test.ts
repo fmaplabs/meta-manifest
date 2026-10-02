@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { list } from "./list";
-import { collection, file, mixedRef, product, ref } from "./reference";
+import { collection, company, companyLocation, customer, file, mixedRef, order, product, ref } from "./reference";
 
 describe("reference codecs", () => {
   it("product reference round-trips a GID", () => {
@@ -58,5 +58,20 @@ describe("reference codecs", () => {
     expect(f.validations()).toEqual([
       { name: "metaobject_definition_types", value: JSON.stringify(["$app:a", "$app:b"]) },
     ]);
+  });
+
+  it("customer/order/company/companyLocation use their own types with no validations", () => {
+    expect(customer().shopifyType).toBe("customer_reference");
+    expect(order().shopifyType).toBe("order_reference");
+    expect(company().shopifyType).toBe("company_reference");
+    expect(companyLocation().shopifyType).toBe("company_location_reference");
+    expect(customer().validations()).toEqual([]);
+  });
+
+  it("customer reference round-trips a GID and wraps in a list", () => {
+    const f = customer();
+    expect(f.decode("gid://shopify/Customer/1")).toEqual({ value: "gid://shopify/Customer/1" });
+    expect(f.encode("gid://shopify/Customer/1")).toBe("gid://shopify/Customer/1");
+    expect(list(customer()).shopifyType).toBe("list.customer_reference");
   });
 });

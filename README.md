@@ -71,6 +71,15 @@ cycle-breaking fields are added by a follow-up update once every member exists).
 Pass a thunk (`m.ref(() => Book)`, `m.mixedRef([() => Book])`) for forward/circular
 references.
 
+The full builder catalog: `m.text`, `m.multilineText`, `m.richText`
+(`rich_text_field` — the raw rich-text AST, JSON on the wire), `m.integer`,
+`m.decimal`, `m.boolean`, `m.date`, `m.dateTime`, `m.url`, `m.color`, `m.json`,
+`m.link` (`link` — `{ text?, url }`), `m.money`, `m.dimension`, `m.weight`,
+`m.volume`, `m.rating`, the resource references `m.product`, `m.variant`,
+`m.collection`, `m.page`, `m.file`, `m.customer`, `m.order`, `m.company`,
+`m.companyLocation`, the metaobject references `m.ref` / `m.mixedRef`, and
+`m.list(...)` around any of them.
+
 ### Configuration options
 
 Beyond fields, a metaobject definition accepts these options — all optional, all

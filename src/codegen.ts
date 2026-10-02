@@ -17,6 +17,8 @@ function filterableEntry(field: RemoteField): string[] {
 const SIMPLE: Record<string, string> = {
   single_line_text_field: "text",
   multi_line_text_field: "multilineText",
+  rich_text_field: "richText",
+  link: "link",
   number_integer: "integer",
   number_decimal: "decimal",
   boolean: "boolean",
@@ -34,6 +36,10 @@ const SIMPLE: Record<string, string> = {
   collection_reference: "collection",
   page_reference: "page",
   file_reference: "file",
+  customer_reference: "customer",
+  order_reference: "order",
+  company_reference: "company",
+  company_location_reference: "companyLocation",
 };
 
 function handleOf(type: string): string {

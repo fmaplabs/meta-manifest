@@ -80,6 +80,18 @@ export function page<R extends boolean = false>(opts: RefOptions<R> = {}) {
 export function file<R extends boolean = false>(opts: FileOptions<R> = {}) {
   return new FileField<R>(opts);
 }
+export function customer<R extends boolean = false>(opts: RefOptions<R> = {}) {
+  return new SimpleRefField<R>(opts, "customer_reference");
+}
+export function order<R extends boolean = false>(opts: RefOptions<R> = {}) {
+  return new SimpleRefField<R>(opts, "order_reference");
+}
+export function company<R extends boolean = false>(opts: RefOptions<R> = {}) {
+  return new SimpleRefField<R>(opts, "company_reference");
+}
+export function companyLocation<R extends boolean = false>(opts: RefOptions<R> = {}) {
+  return new SimpleRefField<R>(opts, "company_location_reference");
+}
 export function ref<R extends boolean = false>(target: TypeRef, opts: RefOptions<R> = {}) {
   return new MetaobjectRefField<R>(target, opts);
 }
