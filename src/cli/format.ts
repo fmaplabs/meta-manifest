@@ -7,7 +7,7 @@ import type {
   MetafieldPushOpResult,
   PushOpResult,
 } from "../index";
-import { APP_NAMESPACE, METAFIELD_OWNER_TYPES } from "../metafields";
+import { APP_NAMESPACE, metafieldOwnerKey } from "../metafields";
 
 export function opTarget(op: DiffOp): string {
   if (op.kind === "addField") return `${op.type}.${op.field.key}`;
@@ -62,11 +62,9 @@ export function describeIssues(issues: Issue[]): string {
   return issues.map((i) => `  ✗ ${i.message}`).join("\n");
 }
 
-const OWNER_KEY_BY_TYPE = new Map(Object.entries(METAFIELD_OWNER_TYPES).map(([k, v]) => [v, k]));
-
 /** `product.$app.careGuide`-style identifier: camelCase owner, namespace, key. */
 export function metafieldOpTarget(op: MetafieldOp): string {
-  const owner = OWNER_KEY_BY_TYPE.get(op.ownerType) ?? op.ownerType;
+  const owner = metafieldOwnerKey(op.ownerType) ?? op.ownerType;
   return `${owner}.${op.namespace}.${op.key}`;
 }
 

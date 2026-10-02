@@ -44,6 +44,15 @@ export const METAFIELD_OWNER_TYPES = {
 export type MetafieldOwner = keyof typeof METAFIELD_OWNER_TYPES;
 export type MetafieldOwnerType = (typeof METAFIELD_OWNER_TYPES)[MetafieldOwner];
 
+const OWNER_KEY_BY_TYPE = new Map<string, MetafieldOwner>(
+  (Object.entries(METAFIELD_OWNER_TYPES) as Array<[MetafieldOwner, MetafieldOwnerType]>).map(([k, v]) => [v, k]),
+);
+
+/** camelCase owner for a `MetafieldOwnerType` enum value (display/codegen direction). */
+export function metafieldOwnerKey(ownerType: string): MetafieldOwner | undefined {
+  return OWNER_KEY_BY_TYPE.get(ownerType);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyField = Field<any, any, any>;
 

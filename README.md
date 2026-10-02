@@ -240,6 +240,82 @@ The model is **upsert-only seed data**:
   `gid://shopify/...` string.
 - `mm diff` previews entry changes the same way it previews definition changes.
 
+## Metafield definitions
+
+Metafields — custom fields on built-in owner types (Product, Customer, Order, …) — are declared
+with `defineMetafields` using the same `m.*` builders, one set per `(ownerType, namespace)`:
+
+```ts
+// src/metafields/product.ts
+import { defineMetafields, m } from "@fmaplabs/meta-manifest";
+import Author from "../metaobjects/author";
+
+export default defineMetafields("product", {
+  // namespace omitted → "$app" (app scope) / "custom" (merchant scope)
+  fields: {
+    careGuide: m.text({ name: "Care Guide", max: 100 }),
+    author: { field: m.ref(Author), pin: true },
+    rating: { field: m.decimal({ min: 0, max: 5 }), capabilities: { adminFilterable: true } },
+  },
+});
+```
+
+A `fields` entry is either a bare builder or a `{ field, pin?, description?, access?,
+capabilities? }` wrapper carrying the metafield-only options. The **namespace and key are
+explicit**: the object key is the metafield key verbatim (quote non-identifier keys), and a
+set-level `namespace` pins definitions other systems already read — e.g. a theme's
+`product.color`:
+
+```ts
+// src/metafields/product-theme.ts — second set on the same owner, different namespace
+export default defineMetafields("product", {
+  namespace: "product",
+  fields: {
+    color: m.color({ name: "Color" }),
+    "care-instructions": m.multilineText(),
+  },
+});
+```
+
+List the sets in a module exporting a `metafields` array and point `metafields` in the config at
+it (same multi-file pattern as [schemas](#declaring-schemas-across-multiple-files)):
+
+```ts
+// src/metafields.ts — the module `metafields` in the config points at
+import productApp from "./metafields/product";
+import productTheme from "./metafields/product-theme";
+
+export const metafields = [productApp, productTheme];
+```
+
+`mm diff` / `mm push` then reconcile the declared definitions — create, update
+(name/description/validations/access/capabilities/pin), and gated destructive ops (type change,
+remove) — printed as `product.$app.careGuide`-style identifiers. Only declared
+`(ownerType, namespace)` pairs are ever compared or touched. See
+[`SYNC.md`](./docs/SYNC.md#metafield-definitions) for the op semantics and
+[`CLI.md`](./docs/CLI.md) for the per-owner token scopes.
+
+Each set also exposes typed value helpers for app code, mirroring `defineMetaobject`:
+
+```ts
+import type { Infer } from "@fmaplabs/meta-manifest";
+import productApp from "./metafields/product";
+
+type ProductMeta = Infer<typeof productApp.fields>;
+productApp.encode({ careGuide: "Wash cold" }); // → metafieldsSet inputs (you add ownerId)
+productApp.parse(metafields);                  // ← owner.metafields {key, jsonValue}[] → typed
+```
+
+Two notes:
+
+- **`required` is local-typing-only** for metafields: Shopify metafield definitions have no
+  required concept, so `required: true` affects `Infer`/`encode`/`parse` but never the diff.
+- **Positioning:** a *distributed* app should usually declare its metafield definitions in
+  `shopify.app.toml` and let Shopify deploy them. meta-manifest's GraphQL sync targets
+  custom-app and merchant-store tooling — and covers what the TOML can't: merchant-scope
+  (`custom`) definitions, explicit third-party namespaces, pinning, and smart-collection
+  conditions.
+
 ## CLI
 
 The CLI drives sync against a real store using an Admin API access token. For a
@@ -259,6 +335,7 @@ export default defineConfig({
   apiVersion: "2026-07",           // optional; defaults to DEFAULT_API_VERSION
   schema: "./src/schema.ts",       // where `pull` writes, `diff`/`push` read
   entries: "./src/entries.ts",     // optional; seed entries to upsert on push
+  metafields: "./src/metafields.ts", // optional; metafield-definition sets to reconcile
   scope: "app",                    // optional; "app" (default) | "merchant" — applies to all metaobjects
   merchantEditable: false,         // optional; default admin access for app-scoped metaobjects
 });
@@ -269,16 +346,18 @@ shell or put it in a `.env` file in the project root, which the CLI loads automa
 environment variables take precedence). The token needs the `read_metaobject_definitions` scope for
 `pull`/`diff`, and `write_metaobject_definitions` (which implies read) for `push`. When `entries`
 is configured, it additionally needs `read_metaobjects` for `diff` and `write_metaobjects` for
-`push`.
+`push`. When `metafields` is configured, it needs each declared owner resource's scopes
+(e.g. `read_products`/`write_products` for product metafields) — see the scope matrix and the
+silent-empty-read warning in [`CLI.md`](./docs/CLI.md).
 
 ### Commands
 
 | Command  | Behavior | Exit |
 |----------|----------|------|
 | `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema (`src/schema.ts` aggregating `src/metaobjects/author.ts`). No network. | 0 / 1 |
-| `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style — writes/overwrites the schema source file). | 0 / 1 |
-| `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared entries when configured). Read-only. | 0 / 1 |
-| `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType` are skipped unless you pass `--allow-destructive`. Declared entries are upserted after definitions. | 0 / 1 / 2 |
+| `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style — writes/overwrites the schema source file). When `metafields` is configured, also re-pulls the declared `(owner, namespace)` pairs into the metafields module. | 0 / 1 |
+| `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared metafields and entries when configured). Read-only. | 0 / 1 |
+| `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType`, and the metafield `removeMetafield`/`changeMetafieldType`, are skipped unless you pass `--allow-destructive`. Metafield definitions push after metaobject definitions; declared entries last. | 0 / 1 / 2 |
 
 ```bash
 npx mm init                    # scaffold config + schema

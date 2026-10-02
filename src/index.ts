@@ -30,7 +30,7 @@ export type {
 import type { MetaobjectSchema } from "./define";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnySchema = MetaobjectSchema<any>;
-export { generateSchemaSource } from "./codegen";
+export { generateSchemaSource, generateMetafieldsSource } from "./codegen";
 
 export { toDefinitionInput } from "./definition-input";
 export type { MetaobjectDefinitionInput, FieldDefinitionInput } from "./definition-input";

@@ -11,6 +11,11 @@ describe("runInit", () => {
     expect(first.created).toContain("meta-manifest.config.ts");
     expect(existsSync(join(cwd, "meta-manifest.config.ts"))).toBe(true);
 
+    // Optional modules are discoverable as commented config lines.
+    const config = readFileSync(join(cwd, "meta-manifest.config.ts"), "utf8");
+    expect(config).toContain(`// entries: "./src/entries.ts",`);
+    expect(config).toContain(`// metafields: "./src/metafields.ts",`);
+
     // One metaobject per file (default export), aggregated by the main schema module.
     expect(readFileSync(join(cwd, "src/metaobjects/author.ts"), "utf8")).toContain("export default defineMetaobject");
     const schema = readFileSync(join(cwd, "src/schema.ts"), "utf8");

@@ -8,6 +8,7 @@ export default defineConfig({
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   schema: "./src/schema.ts",
   // entries: "./src/entries.ts",
+  // metafields: "./src/metafields.ts",
 });
 `;
 

@@ -281,6 +281,58 @@ try {
 
 ---
 
+## Metafield definitions
+
+When metafield sets are declared with `defineMetafields` (and wired up via
+`metafields` in the CLI config), a parallel plan/apply pipeline runs for them
+between metaobject definitions and entries:
+`resolveMetafieldSets` → `pullMetafields` → `diffMetafields` → `pushMetafields`.
+
+Each declared field diffs independently, keyed by `(ownerType, namespace, key)`,
+with its own flat op set (printed as `product.$app.careGuide`-style identifiers):
+
+| Op | Meaning | Destructive |
+|----|---------|-------------|
+| `createMetafield` | declared locally, absent remotely | no |
+| `updateMetafield` | same type; drift in name / description / validations / access / capabilities / pin | no |
+| `changeMetafieldType` | the `type` differs — delete + recreate (`type`, like `namespace`/`key`/`ownerType`, is immutable) | **yes** |
+| `removeMetafield` | present remotely but not declared, **within a declared `(ownerType, namespace)` pair** | **yes** |
+
+Semantics worth knowing:
+
+- **Namespace resolution.** A declared `namespace` is used verbatim. Without one,
+  app scope resolves to the `$app` reserved namespace (canonicalized against the
+  store's `app--<id>` spelling) and merchant scope to `"custom"`. `$app:<suffix>`
+  sub-namespaces round-trip too.
+- **Only declared pairs are managed.** Definitions in `(ownerType, namespace)`
+  pairs no set declares are never compared, updated, or removed — the same
+  upsert-only philosophy as entries, except *within* a declared pair, where
+  undeclared remote definitions plan a (gated) `removeMetafield`.
+- **Destructive ops are opt-in** behind `--allow-destructive`, exactly like
+  definition sync. Deleting inside an app-reserved namespace always sends
+  `deleteAllAssociatedMetafields: true` — Shopify requires it there, and it wipes
+  every stored value for that definition store-wide (asynchronously). The plan
+  output says so explicitly.
+- **Ordering.** Metafield pushes run after metaobject definition creates (a
+  `metaobject_reference` metafield needs its target definition to exist) and
+  before entries. Within metafields no ordering is needed — they cannot reference
+  each other. Merchant-scoped `m.ref` targets are sent as definition GIDs
+  (`metaobject_definition_id`), resolved from the metaobject phase's pulled and
+  just-created ids.
+- **`required` is local-typing-only.** Metafield definitions have no required
+  concept; `required: true` on a builder affects `Infer` and `encode`/`parse` and
+  is excluded from the definition diff.
+- **Validation tightening can fail server-side** against existing values; it
+  surfaces as a per-op `userError` (`failed`), not a pre-check.
+- **Access is managed only where declared** (and `access.admin` only for
+  app-reserved namespaces). Shopify reports merchant-owned definitions' admin
+  access as `PUBLIC_READ_WRITE`, which its own input type refuses — leaving access
+  undeclared sidesteps the echo trap.
+
+`pushMetafields` reports per-op results exactly like `push`: `applied` /
+`skipped` / `blocked` / `failed` (per-op `userErrors`, never thrown), and a failed
+or blocked metafield op flips `mm push` to exit code `2`.
+
 ## Seed entries (upsert-only)
 
 When entries are declared with `defineEntries` (and wired up via `entries` in the CLI

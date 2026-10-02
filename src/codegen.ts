@@ -1,5 +1,7 @@
 import type { RemoteAccess, RemoteCapabilities, RemoteDefinition, RemoteField } from "./sync/normalize";
 import type { FieldValidation } from "./fields/base";
+import type { PulledMetafieldDefinition } from "./sync/metafield-pull";
+import { APP_NAMESPACE, metafieldOwnerKey } from "./metafields";
 
 const APP_PREFIX = "$app:";
 
@@ -144,13 +146,13 @@ function scalarEntries(field: RemoteField, warnings: string[], builder: string):
   return e;
 }
 
-function scalarCall(builder: string, field: RemoteField, warnings: string[], extra: string[] = []): string {
-  const lit = optsLiteral([...scalarEntries(field, warnings, builder), ...extra]);
+function scalarCall(builder: string, field: RemoteField, warnings: string[], extra: string[] = [], lead: string[] = []): string {
+  const lit = optsLiteral([...lead, ...scalarEntries(field, warnings, builder), ...extra]);
   return lit ? `m.${builder}(${lit})` : `m.${builder}()`;
 }
 
-/** Build the m.* call source for a single field. */
-function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warnings: string[]): string {
+/** Build the m.* call source for a single field. `lead` entries open the options literal. */
+function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warnings: string[], lead: string[] = []): string {
   const type = field.type;
 
   if (type === "rating") {
@@ -158,6 +160,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
     const max = v(field.validations, "max");
     const e = [`min: ${Number(min ?? 1)}`, `max: ${Number(max ?? 5)}`];
     if (field.required) e.unshift("required: true");
+    e.unshift(...lead);
     e.push(...filterableEntry(field));
     if (min === undefined || max === undefined) warnings.push(`rating field "${field.key}" missing min/max`);
     return `m.rating(${optsLiteral(e)})`;
@@ -170,7 +173,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
       warnings.push(`unresolved reference on field "${field.key}"`);
       return `m.json() /* TODO: unmapped reference */`;
     }
-    const refEntries: string[] = [];
+    const refEntries: string[] = [...lead];
     if (field.required) refEntries.push("required: true");
     refEntries.push(...filterableEntry(field));
     const opts = optsLiteral(refEntries);
@@ -180,7 +183,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
   if (type === "mixed_reference") {
     const arr = mixedTargetsLiteral(field, typeToIdent, warnings);
     if (!arr) return `m.json() /* TODO: unmapped mixed reference */`;
-    const refEntries: string[] = [];
+    const refEntries: string[] = [...lead];
     if (field.required) refEntries.push("required: true");
     refEntries.push(...filterableEntry(field));
     const opts = optsLiteral(refEntries);
@@ -189,7 +192,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
 
   if (type.startsWith("list.")) {
     const inner = type.slice("list.".length);
-    const listEntries: string[] = [];
+    const listEntries: string[] = [...lead];
     if (field.required) listEntries.push("required: true");
     const min = v(field.validations, "list.min");
     const max = v(field.validations, "list.max");
@@ -221,7 +224,7 @@ function fieldCall(field: RemoteField, typeToIdent: Map<string, string>, warning
     return listOpts ? `m.list(${innerCall}, ${listOpts})` : `m.list(${innerCall})`;
   }
 
-  if (SIMPLE[type]) return scalarCall(SIMPLE[type], field, warnings, filterableEntry(field));
+  if (SIMPLE[type]) return scalarCall(SIMPLE[type], field, warnings, filterableEntry(field), lead);
 
   warnings.push(`unmapped field type "${type}" on field "${field.key}"`);
   return `m.json() /* TODO: unmapped type ${type} */`;
@@ -337,4 +340,109 @@ export function generateSchemaSource(defs: RemoteDefinition[]): string {
   const footer = `export const schemas = [${idents.join(", ")}];`;
   for (const w of warnings) console.warn(`[meta-manifest] codegen: ${w}`);
   return `${header}\n\n${body}\n\n${footer}\n`;
+}
+
+const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** Object keys that aren't identifiers (e.g. "care-instructions") are quoted verbatim. */
+function fieldKeySource(key: string): string {
+  return IDENT_RE.test(key) ? key : JSON.stringify(key);
+}
+
+function pascal(s: string): string {
+  return s
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((p) => p[0].toUpperCase() + p.slice(1))
+    .join("");
+}
+
+/** Declarable, non-default access options for a metafield wrapper, or "". */
+function metafieldAccessSource(def: PulledMetafieldDefinition): string {
+  const parts: string[] = [];
+  if (def.namespace.startsWith(APP_NAMESPACE) && def.access?.admin === "MERCHANT_READ_WRITE") {
+    parts.push(`admin: "merchant_read_write"`);
+  }
+  if (def.access?.storefront === "PUBLIC_READ") parts.push(`storefront: "public_read"`);
+  if (def.access?.customerAccount === "READ") parts.push(`customerAccount: "read"`);
+  return parts.length ? `{ ${parts.join(", ")} }` : "";
+}
+
+/** The `{ field, ... }` wrapper entries a metafield definition needs beyond its builder. */
+function metafieldWrapperEntries(def: PulledMetafieldDefinition): string[] {
+  const entries: string[] = [];
+  if (def.pin) entries.push("pin: true");
+  if (def.description != null) entries.push(`description: ${JSON.stringify(def.description)}`);
+  const access = metafieldAccessSource(def);
+  if (access) entries.push(`access: ${access}`);
+  const caps: string[] = [];
+  if (def.capabilities.smartCollectionCondition.enabled) caps.push("smartCollectionCondition: true");
+  if (def.capabilities.uniqueValues.enabled) caps.push("uniqueValues: true");
+  if (caps.length) entries.push(`capabilities: { ${caps.join(", ")} }`);
+  return entries;
+}
+
+/** The `RemoteField` shape `fieldCall` consumes (`adminFilterable` → builder `filterable`). */
+function toRemoteField(def: PulledMetafieldDefinition): RemoteField {
+  return {
+    key: def.key,
+    type: def.type,
+    required: false,
+    filterable: def.capabilities.adminFilterable.enabled,
+    validations: def.validations,
+  };
+}
+
+/**
+ * Generate a metafields-module source (using `defineMetafields`/`m`) from pulled
+ * metafield definitions: one set per `(ownerType, namespace)`. Reference targets
+ * are emitted as inline `({ type: "…" })` TypeRefs, so the module needs no
+ * imports from the schema module. [design §8]
+ */
+export function generateMetafieldsSource(defs: PulledMetafieldDefinition[]): string {
+  const groups = new Map<string, { ownerType: string; namespace: string; defs: PulledMetafieldDefinition[] }>();
+  for (const def of defs) {
+    const key = `${def.ownerType}/${def.namespace}`;
+    const group = groups.get(key) ?? { ownerType: def.ownerType, namespace: def.namespace, defs: [] };
+    group.defs.push(def);
+    groups.set(key, group);
+  }
+
+  // Every type-form reference target maps to an inline `({ type })` expression;
+  // GID-form targets (unmanaged/merchant definitions) stay unmapped → TODO.
+  const typeToIdent = new Map<string, string>();
+  for (const def of defs) {
+    for (const t of refTargets(toRemoteField(def))) {
+      if (!t.startsWith("gid://")) typeToIdent.set(t, `({ type: ${JSON.stringify(t)} })`);
+    }
+  }
+
+  const warnings: string[] = [];
+  const blocks: string[] = [];
+  const idents: string[] = [];
+  for (const group of groups.values()) {
+    const ownerKey = metafieldOwnerKey(group.ownerType) ?? group.ownerType;
+    const ident = pascal(ownerKey) + (group.namespace === APP_NAMESPACE ? "App" : pascal(group.namespace));
+    idents.push(ident);
+    const nsLine = group.namespace === APP_NAMESPACE ? "" : `\n  namespace: ${JSON.stringify(group.namespace)},`;
+    const fields = group.defs
+      .map((def) => {
+        const lead = def.name != null && def.name !== def.key ? [`name: ${JSON.stringify(def.name)}`] : [];
+        const call = fieldCall(toRemoteField(def), typeToIdent, warnings, lead);
+        const wrapper = metafieldWrapperEntries(def);
+        const value = wrapper.length ? `{ field: ${call}, ${wrapper.join(", ")} }` : call;
+        return `    ${fieldKeySource(def.key)}: ${value},`;
+      })
+      .join("\n");
+    blocks.push(`export const ${ident} = defineMetafields(${JSON.stringify(ownerKey)}, {${nsLine}
+  fields: {
+${fields}
+  },
+});`);
+  }
+
+  const header = `import { defineMetafields, m } from "@fmaplabs/meta-manifest";`;
+  const footer = `export const metafields = [${idents.join(", ")}];`;
+  for (const w of warnings) console.warn(`[meta-manifest] codegen: ${w}`);
+  return `${header}\n\n${blocks.join("\n\n")}\n\n${footer}\n`;
 }

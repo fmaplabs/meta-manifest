@@ -65,7 +65,19 @@ export async function main(argv: string[]): Promise<number> {
     const config = await loadConfig(args.config);
     const client = createAdminClient(config);
     if (args.command === "pull") {
-      await runPull({ client, schemaPath: config.schema, force: args.force });
+      // Metafield re-pull needs the locally declared pairs; a missing/invalid
+      // metafields module just means nothing is declared yet — skip with a note.
+      let metafields: { path: string; sets: Awaited<ReturnType<typeof loadMetafields>>; config: typeof config } | undefined;
+      if (config.metafields) {
+        try {
+          metafields = { path: config.metafields, sets: await loadMetafields(config.metafields), config };
+        } catch (e) {
+          console.warn(
+            `Skipping metafields pull — could not load "${config.metafields}": ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+      await runPull({ client, schemaPath: config.schema, force: args.force, metafields });
       return 0;
     }
     const schemas = await loadSchemas(config.schema);
