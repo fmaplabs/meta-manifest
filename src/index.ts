@@ -1,5 +1,5 @@
 export { defineConfig, validateConfig, DEFAULT_API_VERSION } from "./config";
-export type { Config } from "./config";
+export type { Config, TokenConfig, CliConfig, AuthMode } from "./config";
 
 export { m, Field } from "./fields/index";
 export type { DecodeResult, FieldValidation, Issue, Money, Measure, Rating, RatingInput, FileType, TypeRef, LinkValue } from "./fields/index";

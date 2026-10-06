@@ -27,6 +27,29 @@ describe("config", () => {
     expect(() => validateConfig({ ...base, entries: "" })).toThrow(/entries/);
   });
 
+  it("validateConfig accepts auth: \"cli\" without an accessToken", () => {
+    const c = validateConfig({ shop: "s.myshopify.com", schema: "./s.ts", auth: "cli" });
+    expect(c.auth).toBe("cli");
+  });
+
+  it("validateConfig still requires shop and schema under auth: \"cli\"", () => {
+    expect(() => validateConfig({ schema: "./s.ts", auth: "cli" })).toThrow(/shop/);
+    expect(() => validateConfig({ shop: "s", auth: "cli" })).toThrow(/schema/);
+  });
+
+  it("validateConfig requires accessToken when auth is \"token\" or absent", () => {
+    expect(() => validateConfig({ shop: "s", schema: "./s.ts" })).toThrow(/accessToken/);
+    expect(() => validateConfig({ shop: "s", schema: "./s.ts", auth: "token" })).toThrow(
+      /accessToken/,
+    );
+  });
+
+  it("validateConfig rejects an unknown auth value naming \"auth\"", () => {
+    expect(() => validateConfig({ shop: "s", accessToken: "t", schema: "./s.ts", auth: "bogus" })).toThrow(
+      /auth/,
+    );
+  });
+
   it("validateConfig accepts a valid metafields path and rejects a non-string one", () => {
     const base = { shop: "s", accessToken: "t", schema: "./s.ts" };
     expect(validateConfig({ ...base, metafields: "./m.ts" }).metafields).toBe("./m.ts");

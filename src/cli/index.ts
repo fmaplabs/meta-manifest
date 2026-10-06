@@ -64,6 +64,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     loadDotEnv();
     const config = await loadConfig(args.config);
+    if (config.auth === "cli") throw new Error(`auth: "cli" is not supported yet.`);
     const client = createAdminClient(config);
     if (args.command === "pull") {
       // Metafield re-pull needs the locally declared pairs; a missing/invalid

@@ -1,10 +1,11 @@
 export const DEFAULT_API_VERSION = "2026-07";
 
-export interface Config {
+/** How the CLI authenticates to the Admin API: a static token, or a `shopify store auth` session. */
+export type AuthMode = "token" | "cli";
+
+interface BaseConfig {
   /** e.g. "my-store.myshopify.com" */
   shop: string;
-  /** Admin API access token; reference via process.env in your config file. */
-  accessToken: string;
   /** Admin API version. Defaults to DEFAULT_API_VERSION. */
   apiVersion?: string;
   /** Path to the schema module whose `schemas` export drives diff/push, and pull writes. */
@@ -19,6 +20,21 @@ export interface Config {
   merchantEditable?: boolean;
 }
 
+export interface TokenConfig extends BaseConfig {
+  auth?: "token";
+  /** Admin API access token; reference via process.env in your config file. */
+  accessToken: string;
+}
+
+export interface CliConfig extends BaseConfig {
+  /** Authenticate via the Shopify CLI's stored `shopify store auth` session. */
+  auth: "cli";
+  /** Permitted but ignored under CLI auth, so switching modes is a one-line edit. */
+  accessToken?: string;
+}
+
+export type Config = TokenConfig | CliConfig;
+
 /** Identity helper for type inference in `meta-manifest.config.ts`. */
 export function defineConfig(config: Config): Config {
   return config;
@@ -26,8 +42,13 @@ export function defineConfig(config: Config): Config {
 
 /** Validate a loaded config object, throwing a one-line Error naming the first missing field. */
 export function validateConfig(raw: unknown): Config {
-  const c = raw as Partial<Config> | null | undefined;
-  for (const key of ["shop", "accessToken", "schema"] as const) {
+  const c = raw as (Partial<BaseConfig> & { auth?: unknown; accessToken?: unknown }) | null | undefined;
+  if (c?.auth !== undefined && c.auth !== "token" && c.auth !== "cli") {
+    throw new Error(`Invalid config: "auth" must be "token" or "cli" when set.`);
+  }
+  const required: ("shop" | "accessToken" | "schema")[] =
+    c?.auth === "cli" ? ["shop", "schema"] : ["shop", "accessToken", "schema"];
+  for (const key of required) {
     if (!c || typeof c[key] !== "string" || c[key] === "") {
       throw new Error(`Invalid config: missing or empty "${key}".`);
     }
@@ -37,5 +58,5 @@ export function validateConfig(raw: unknown): Config {
       throw new Error(`Invalid config: "${key}" must be a non-empty path string when set.`);
     }
   }
-  return c as Config;
+  return c as unknown as Config;
 }
