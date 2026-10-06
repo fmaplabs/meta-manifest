@@ -86,6 +86,49 @@ or put it in a `.env` file in the project root, which the CLI loads automaticall
 SHOPIFY_ADMIN_TOKEN=shpat_…
 ```
 
+### Alternative: authenticate with the Shopify CLI
+
+If you'd rather not create a custom app, set `auth: "cli"` in the config and the
+`mm` CLI runs every Admin GraphQL call through the
+[Shopify CLI](https://shopify.dev/docs/api/shopify-cli)'s stored store session
+instead of a token. Install the Shopify CLI (`pnpm add -D @shopify/cli` or
+`npm i -g @shopify/cli`), then authenticate once:
+
+```bash
+shopify store auth --store my-store.myshopify.com \
+  --scopes read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects
+```
+
+When `metafields` is set in the config, append each declared owner resource's
+read/write scopes from the table above (e.g. `read_products,write_products`).
+The session is durable (the CLI refreshes it; re-run `store auth` if it
+expires), and `SHOPIFY_ADMIN_TOKEN` is no longer needed — a configured
+`accessToken` is ignored under `auth: "cli"`.
+
+```ts
+export default defineConfig({
+  shop: "my-store.myshopify.com",
+  auth: "cli",
+  scope: "merchant",
+  schema: "./src/schema.ts",
+});
+```
+
+Two caveats:
+
+- **Latency.** Every call shells out to `shopify store execute` (~2–4 s of
+  process overhead per request). Fine for occasional syncs; use a token for CI.
+  Mutations are handled automatically (`push` passes `--allow-mutations` for
+  you; read-only commands never do).
+- **`$app` changes identity.** The session's "current app" is the *Shopify
+  CLI's* app, not yours — so `$app:` metaobject types and `$app` metafield
+  namespaces would be reserved under the CLI app's id (`app--…`), unusable by
+  your own app. The CLI therefore refuses `pull` (which enumerates app-owned
+  material) and any `diff`/`push` involving app-scoped material under
+  `auth: "cli"`. Use `scope: "merchant"` (as above) and explicit metafield
+  namespaces, or keep token auth for app-scoped work. `--allow-cli-app-scope`
+  downgrades the error to a warning for dev-store experimentation.
+
 ---
 
 ## 3. Scaffold the project

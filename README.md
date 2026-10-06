@@ -336,6 +336,7 @@ import { defineConfig } from "@fmaplabs/meta-manifest";
 export default defineConfig({
   shop: "my-store.myshopify.com",
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
+  // auth: "cli",                  // optional; authenticate via a `shopify store auth` session instead
   apiVersion: "2026-07",           // optional; defaults to DEFAULT_API_VERSION
   schema: "./src/schema.ts",       // where `pull` writes, `diff`/`push` read
   entries: "./src/entries.ts",     // optional; seed entries to upsert on push
@@ -355,6 +356,12 @@ is configured, it additionally needs `read_metaobjects` for `diff` and `write_me
 [`CLI.md`](./docs/CLI.md). Shopify signals a missing owner read scope with an *empty* result
 rather than an error; for the common owners the CLI detects this and fails with the missing
 scope named instead of planning spurious re-creates.
+
+Alternatively, `auth: "cli"` skips the token entirely and runs every call through the Shopify
+CLI's stored `shopify store auth` session. Because that session's "current app" is the Shopify
+CLI itself, `$app`-scoped material changes identity under CLI auth — the CLI refuses `pull` and
+any app-scoped `diff`/`push` (override with `--allow-cli-app-scope`); use `scope: "merchant"`
+with it. See the walk-through in [`CLI.md` §2](./docs/CLI.md#2-get-an-admin-api-token).
 
 ### Commands
 

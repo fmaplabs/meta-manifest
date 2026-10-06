@@ -87,6 +87,13 @@ It POSTs to `https://{shop}/admin/api/{apiVersion}/graphql.json` with an
 `X-Shopify-Access-Token` header, returns `{ data, errors }`, and throws
 `SyncTransportError` on a non-OK response or network failure.
 
+The same subpath also exports `createCliAdminClient({ shop, apiVersion? })`,
+which satisfies the same contract by shelling out to `shopify store execute`
+against a stored `shopify store auth` session — no token needed, at the cost of
+a few seconds of process overhead per call. It's what the CLI uses under
+`auth: "cli"` (see [`CLI.md` §2](./CLI.md#2-get-an-admin-api-token), including
+the `$app`-identity caveat).
+
 If you're embedding sync in your own app (Shopify-embedded or otherwise) instead
 of using the CLI, adapt whatever GraphQL-executing function you already have to
 the same shape:

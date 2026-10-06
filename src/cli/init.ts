@@ -6,6 +6,7 @@ const CONFIG_TEMPLATE = `import { defineConfig } from "@fmaplabs/meta-manifest";
 export default defineConfig({
   shop: "my-store.myshopify.com",
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
+  // auth: "cli", // use a \`shopify store auth\` session instead of accessToken — see docs/CLI.md §2
   schema: "./src/schema.ts",
   // entries: "./src/entries.ts",
   // metafields: "./src/metafields.ts",

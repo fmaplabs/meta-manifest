@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Opt-in Shopify-CLI auth mode.** Set `auth: "cli"` in the config and the CLI runs every
+  Admin GraphQL call through the Shopify CLI's stored `shopify store auth` session via
+  `shopify store execute` — no custom-app token required (`accessToken` becomes optional and
+  is ignored). `createCliAdminClient` is exported from the `/node` subpath beside
+  `createAdminClient`. Because a store session's "current app" is the Shopify CLI itself,
+  `$app` material changes identity under CLI auth; `pull`, and `diff`/`push` involving
+  app-scoped material, fail with an explanation unless `--allow-cli-app-scope` downgrades
+  the error to a warning. Intended for `scope: "merchant"` workflows and dev stores — each
+  call carries a few seconds of CLI process overhead. See `docs/CLI.md` §2.
 - **Metafield-definition sync.** Declare typed metafield definitions on Shopify owner
   resources (product, customer, order, company, …) with `defineMetafields`, reusing the same
   `m.*` field builders as metaobjects. Point the config's `metafields` at the module and
