@@ -12,13 +12,37 @@ fields) to a store via `pull` → `diff` → `push`. It can also declare **seed 
 upsert them on `push` (see [Seed entries](#seed-entries)) — but never enumerates, queries, or
 deletes store data.
 
-## Install
+## Quick start
+
+Install, scaffold, and point the config at your store:
 
 ```bash
-npm i -D @fmaplabs/meta-manifest
-# or
-pnpm add -D @fmaplabs/meta-manifest
+npm i -D @fmaplabs/meta-manifest   # or: pnpm add -D @fmaplabs/meta-manifest
+npx mm init                        # writes meta-manifest.config.ts + a starter src/schema.ts
 ```
+
+Authenticate one of two ways:
+
+- **Admin API token** (default) — create a custom app in the store admin
+  (**Settings → Apps and sales channels → Develop apps**), grant it
+  `read_metaobject_definitions`/`write_metaobject_definitions`, and expose the token as
+  `SHOPIFY_ADMIN_TOKEN` (exported, or in a `.env` the CLI loads automatically).
+- **Shopify CLI session** — no custom app needed: set `auth: "cli"` in the config and run
+  `shopify store auth --store my-store.myshopify.com --scopes read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects`
+  once. Every call then goes through `shopify store execute` (a few seconds of overhead per
+  call; meant for `scope: "merchant"` workflows — see [Config](#config)).
+
+Then sync:
+
+```bash
+npx mm pull   # bootstrap schema.ts from a store's existing definitions (skip if starting fresh)
+npx mm diff   # preview what push would change
+npx mm push   # apply it
+```
+
+Edit `src/schema.ts` (and the optional `entries`/`metafields` modules) with the builders below;
+`diff`/`push` reconcile the store to match. For the narrative walk-through with example output
+and CI usage, see [`docs/CLI.md`](./docs/CLI.md).
 
 ## Library usage
 
@@ -322,9 +346,10 @@ Two notes:
 
 ## CLI
 
-The CLI drives sync against a real store using an Admin API access token. For a
-step-by-step walk-through (install → token → `init` → `pull`/`diff`/`push`, with
-example output and CI usage), see the [CLI quick start & usage guide](./docs/CLI.md).
+The CLI drives sync against a real store using an Admin API access token or, with
+`auth: "cli"`, a stored Shopify CLI session. For a step-by-step walk-through
+(install → auth → `init` → `pull`/`diff`/`push`, with example output and CI usage),
+see the [CLI quick start & usage guide](./docs/CLI.md).
 
 ### Config
 
@@ -386,6 +411,9 @@ npx mm diff --config ./staging.config.ts  # use a non-default config file
 
 - `--config <path>` — use a non-default config file instead of `meta-manifest.config.ts`.
 - `--allow-destructive` — apply destructive changes (`removeField`/`changeFieldType`) on push.
+- `--allow-cli-app-scope` — under `auth: "cli"`, downgrade the app-scope hard error to a
+  warning (dev-store experimentation only — `$app` material resolves to the Shopify CLI's
+  own app identity there).
 - `--force` — overwrite the schema file on `pull` without the "overwriting" warning.
 
 `mm push` exits `2` if any operation failed **or was blocked** (e.g. a reference cycle among the
