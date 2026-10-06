@@ -57,9 +57,13 @@ no metafield-specific scope. `diff` needs the read scope, `push` the write scope
 > **Warning — a missing read scope is silent.** Shopify returns an **empty**
 > `metafieldDefinitions` connection instead of an error when the token lacks the
 > owner's read scope. A diff would then plan to re-create every declared
-> definition (and, with `--allow-destructive`, plan removes). If a first `diff`
-> against a configured store unexpectedly reports only creates, verify the
-> token's scopes before pushing.
+> definition. For the owners in the table above, `pull`/`diff`/`push` guard
+> against this: when an owner's pull comes back empty, the token's granted
+> scopes are checked, and a confirmed-missing read scope fails the command with
+> `Shopify returned no metafield definitions for … the token cannot read`
+> instead of trusting the empty result. Owners outside the table aren't
+> covered — if a first `diff` against a configured store unexpectedly reports
+> only creates for one of those, verify the token's scopes before pushing.
 
 The simplest way to get one is a **custom app** created in the store's admin
 (**Settings → Apps and sales channels → Develop apps**), which issues an Admin
@@ -385,6 +389,7 @@ failed). See [`SYNC.md` §5](./SYNC.md#5-push). |
 | `push` exits `2` with `✗ failed` lines | Shopify returned `userErrors` for that op (e.g. an invalid validation). The message is in the line. |
 | Destructive changes won't apply | Expected — pass `--allow-destructive` (covers `removeField`, `changeFieldType`, and `onlineStore` disable). |
 | `Warning: "…" is merchant-scoped but an app-owned "$app:…" already exists` | You changed a definition's `scope` after it was created. `type` is immutable, so `push` creates a new merchant-owned definition and orphans the app-owned one; migrate entries manually ([`SYNC.md` §3](./SYNC.md#3-pull)). |
+| `Shopify returned no metafield definitions for … the token cannot read` | A declared owner's pull came back empty **and** the token is missing that owner's read scope (step 2's table) — Shopify signals a missing scope with an empty list, not an error, so the result can't be trusted. Grant the named scope(s) to the token, or remove that owner's metafield declarations. |
 | `pull` warns it's overwriting | Expected — it regenerates the file. Pass `--force` to silence, or commit first so you can diff the regeneration. |
 
 ---

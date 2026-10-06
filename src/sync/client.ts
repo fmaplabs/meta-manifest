@@ -112,6 +112,16 @@ export const CURRENT_APP_QUERY = `query CurrentAppReservedNamespace {
   }
 }`;
 
+// Metafield definitions live behind the OWNER resource's scopes, and Shopify
+// returns an empty connection — not an error — when the read scope is missing.
+// The pull disambiguates an empty owner result against the token's granted
+// scopes before trusting it. [design §8]
+export const ACCESS_SCOPES_QUERY = `query TokenAccessScopes {
+  currentAppInstallation {
+    accessScopes { handle }
+  }
+}`;
+
 export const PULL_METAFIELD_DEFINITIONS_QUERY = `query PullMetafieldDefinitions($ownerType: MetafieldOwnerType!, $after: String) {
   metafieldDefinitions(ownerType: $ownerType, first: 50, after: $after) {
     nodes {

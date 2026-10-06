@@ -1,6 +1,6 @@
 import type { FieldValidation } from "../fields/base";
-import { APP_NAMESPACE, isAppReservedNamespace, type MetafieldOwnerType } from "../metafields";
-import { CURRENT_APP_QUERY, execute, PULL_METAFIELD_DEFINITIONS_QUERY, type AdminGraphQLClient } from "./client";
+import { APP_NAMESPACE, isAppReservedNamespace, metafieldOwnerKey, type MetafieldOwnerType } from "../metafields";
+import { ACCESS_SCOPES_QUERY, CURRENT_APP_QUERY, execute, PULL_METAFIELD_DEFINITIONS_QUERY, type AdminGraphQLClient } from "./client";
 import type { MetafieldAccess, MetafieldCapabilities } from "./resolve";
 
 /** One declared `(ownerType, namespace)` pair — the unit `mm` manages. [design §8] */
@@ -107,11 +107,75 @@ function normalizeNode(ownerType: MetafieldOwnerType, node: PullNode, appNamespa
   return out;
 }
 
+// The owner resource's read scope gates metafield-definition reads (there is no
+// metafield-specific scope). Only the groupings documented in docs/CLI.md §2 are
+// mapped — a wrong guess here would block a legitimate first push with a phantom
+// "missing scope" error, so undocumented owners skip the guard instead.
+const READ_SCOPE_BY_OWNER: Partial<Record<MetafieldOwnerType, string>> = {
+  PRODUCT: "read_products",
+  PRODUCTVARIANT: "read_products",
+  COLLECTION: "read_products",
+  CUSTOMER: "read_customers",
+  ORDER: "read_orders",
+  DRAFTORDER: "read_orders",
+  COMPANY: "read_companies",
+  COMPANY_LOCATION: "read_companies",
+};
+
+/** The token's granted scope handles, or undefined when they cannot be read (guard degrades). */
+async function fetchScopeHandles(client: AdminGraphQLClient): Promise<Set<string> | undefined> {
+  try {
+    const data = await execute<{ currentAppInstallation: { accessScopes?: Array<{ handle: string }> | null } | null }>(
+      client,
+      ACCESS_SCOPES_QUERY,
+    );
+    const scopes = data.currentAppInstallation?.accessScopes;
+    return scopes ? new Set(scopes.map((s) => s.handle)) : undefined;
+  } catch {
+    // Best-effort: an empty pull is only AMBIGUOUS. If the scopes can't be read,
+    // fall back to trusting it rather than failing diff/pull/push outright.
+    return undefined;
+  }
+}
+
+/**
+ * Shopify answers an owner read the token isn't scoped for with an EMPTY
+ * `metafieldDefinitions` connection, not an error — which a diff would read as
+ * "nothing exists remotely" and plan to re-create everything. For owner types
+ * whose page-walk returned zero raw nodes, confirm the token actually holds the
+ * documented read scope (write implies read); throw naming every confirmed-
+ * unreadable owner. A non-empty connection already proves the scope. [design §8]
+ */
+async function guardEmptyOwnerPulls(client: AdminGraphQLClient, emptyOwners: MetafieldOwnerType[]): Promise<void> {
+  const guarded = emptyOwners.filter((o) => READ_SCOPE_BY_OWNER[o] !== undefined);
+  if (guarded.length === 0) return;
+  const handles = await fetchScopeHandles(client);
+  if (!handles) return;
+  const missing = guarded.filter((o) => {
+    const read = READ_SCOPE_BY_OWNER[o] as string;
+    return !handles.has(read) && !handles.has(read.replace(/^read_/, "write_"));
+  });
+  if (missing.length === 0) return;
+  const lines = missing.map((o) => {
+    const owner = metafieldOwnerKey(o) ?? o;
+    return `  - ${owner}: token lacks ${READ_SCOPE_BY_OWNER[o]}`;
+  });
+  throw new Error(
+    `Shopify returned no metafield definitions for ${missing.length === 1 ? "an owner type" : "owner types"} the token cannot read:\n` +
+      `${lines.join("\n")}\n` +
+      `A missing owner read scope makes Shopify return an empty list instead of an error, so this result cannot ` +
+      `be trusted — a diff would plan to re-create every declared definition. Grant the scope${missing.length === 1 ? "" : "s"} ` +
+      `above (the write scope for push), or remove the owner's declarations. See docs/CLI.md §2.`,
+  );
+}
+
 /**
  * Reads the current metafield definitions for the declared `(ownerType, namespace)`
  * pairs: one page-walk per unique owner type, nodes filtered client-side to the
  * declared pairs after namespace canonicalization. Definitions in unmanaged
- * pairs are never returned, so they are never compared or touched. [design §8]
+ * pairs are never returned, so they are never compared or touched. An owner type
+ * whose connection comes back empty is checked against the token's access scopes
+ * before the emptiness is believed (`guardEmptyOwnerPulls`). [design §8]
  */
 export async function pullMetafields(
   client: AdminGraphQLClient,
@@ -126,16 +190,21 @@ export async function pullMetafields(
     : undefined;
 
   const out: PulledMetafieldDefinition[] = [];
+  const emptyOwners: MetafieldOwnerType[] = [];
   for (const ownerType of ownerTypes) {
     let after: string | null = null;
+    let rawNodes = 0;
     do {
       const data: PullResponse = await execute<PullResponse>(client, PULL_METAFIELD_DEFINITIONS_QUERY, { ownerType, after });
+      rawNodes += data.metafieldDefinitions.nodes.length;
       for (const node of data.metafieldDefinitions.nodes) {
         const def = normalizeNode(ownerType, node, appNamespace);
         if (declared.has(`${def.ownerType}/${def.namespace}`)) out.push(def);
       }
       after = data.metafieldDefinitions.pageInfo.hasNextPage ? data.metafieldDefinitions.pageInfo.endCursor : null;
     } while (after !== null);
+    if (rawNodes === 0) emptyOwners.push(ownerType);
   }
+  await guardEmptyOwnerPulls(client, emptyOwners);
   return out;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACCESS_SCOPES_QUERY,
   CREATE_DEFINITION_MUTATION,
   execute,
   PULL_DEFINITION_QUERY,
@@ -51,5 +52,6 @@ describe("operation strings", () => {
     expect(PULL_DEFINITION_QUERY).toContain("metaobjectDefinitionByType(type: $type)");
     expect(CREATE_DEFINITION_MUTATION).toContain("metaobjectDefinitionCreate(definition: $definition)");
     expect(UPDATE_DEFINITION_MUTATION).toContain("metaobjectDefinitionUpdate(id: $id, definition: $definition)");
+    expect(ACCESS_SCOPES_QUERY).toContain("accessScopes { handle }");
   });
 });

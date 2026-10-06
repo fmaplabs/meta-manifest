@@ -327,6 +327,15 @@ Semantics worth knowing:
   definition — whose pair is no longer declared, hence no longer managed — is
   left behind with its values. `mm diff`/`push` warn when they detect this;
   migration is manual, as with metaobject scope changes above.
+- **Empty pulls are scope-checked before they're believed.** Shopify answers an
+  owner read the token isn't scoped for with an *empty* connection, not an
+  error — indistinguishable from a store with no definitions, so a diff would
+  plan to re-create everything. When an owner type's pull returns zero nodes,
+  `pullMetafields` reads the token's granted scopes (`currentAppInstallation
+  { accessScopes }`) and fails with the missing `read_*` scopes named if the
+  owner's documented scope isn't granted (write counts as read). Owners without
+  a documented scope mapping, and tokens whose scopes can't be read, skip the
+  check — the guard is best-effort, never a false block.
 - **`required` is local-typing-only.** Metafield definitions have no required
   concept; `required: true` on a builder affects `Infer` and `encode`/`parse` and
   is excluded from the definition diff.

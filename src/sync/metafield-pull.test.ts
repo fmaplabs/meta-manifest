@@ -26,14 +26,25 @@ function node(overrides: Node): Node {
 }
 
 /** Pages of nodes per ownerType; records the variables of every request. */
-function fakeStore(pagesByOwner: Record<string, Node[][]>, opts: { appId?: string | null } = {}) {
+function fakeStore(
+  pagesByOwner: Record<string, Node[][]>,
+  opts: { appId?: string | null; scopes?: string[] | "error" } = {},
+) {
   const requests: Array<Record<string, unknown> | undefined> = [];
   let appQueries = 0;
+  let scopeQueries = 0;
   const client: AdminGraphQLClient = async (query, options) => {
     if (query === CURRENT_APP_QUERY) {
       appQueries += 1;
       const appId = opts.appId === undefined ? "123" : opts.appId;
       return { data: { currentAppInstallation: appId === null ? null : { app: { id: `gid://shopify/App/${appId}` } } } };
+    }
+    if (query.includes("accessScopes")) {
+      scopeQueries += 1;
+      if (opts.scopes === "error") return { errors: [{ message: "boom" }] };
+      return {
+        data: { currentAppInstallation: { accessScopes: (opts.scopes ?? []).map((handle) => ({ handle })) } },
+      };
     }
     expect(query).toBe(PULL_METAFIELD_DEFINITIONS_QUERY);
     requests.push(options?.variables);
@@ -52,7 +63,7 @@ function fakeStore(pagesByOwner: Record<string, Node[][]>, opts: { appId?: strin
       },
     };
   };
-  return { client, requests, appQueries: () => appQueries };
+  return { client, requests, appQueries: () => appQueries, scopeQueries: () => scopeQueries };
 }
 
 describe("pullMetafields", () => {
@@ -127,6 +138,57 @@ describe("pullMetafields", () => {
     const out = await pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }]);
     expect(requests).toHaveLength(2);
     expect(out.map((d) => d.key)).toEqual(["a", "b"]);
+  });
+
+  // A missing owner read scope makes Shopify return an EMPTY metafieldDefinitions
+  // connection instead of an error, so an empty owner pull is ambiguous: genuinely
+  // empty, or unauthorized. The guard disambiguates via the token's accessScopes.
+  describe("token-scope empty-pull guard", () => {
+    it("errors when an owner's pull is empty and the token lacks the documented read scope", async () => {
+      const { client } = fakeStore({ PRODUCT: [[]] }, { scopes: ["write_metaobject_definitions"] });
+      await expect(pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }])).rejects.toThrow(
+        /read_products/,
+      );
+    });
+
+    it("treats an empty pull as genuinely empty when the token holds the read scope", async () => {
+      const { client } = fakeStore({ PRODUCT: [[]] }, { scopes: ["read_products"] });
+      await expect(pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }])).resolves.toEqual([]);
+    });
+
+    it("accepts the write scope as implying read", async () => {
+      const { client } = fakeStore({ PRODUCT: [[]] }, { scopes: ["write_products"] });
+      await expect(pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }])).resolves.toEqual([]);
+    });
+
+    it("skips the scope query entirely when the owner's connection has nodes, even all-filtered ones", async () => {
+      const { client, scopeQueries } = fakeStore(
+        { PRODUCT: [[node({ namespace: "unmanaged", key: "x" })]] },
+        { scopes: [] },
+      );
+      await expect(pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }])).resolves.toEqual([]);
+      expect(scopeQueries()).toBe(0);
+    });
+
+    it("skips the guard for owners without a documented scope mapping", async () => {
+      const { client } = fakeStore({ MARKET: [[]] }, { scopes: [] });
+      await expect(pullMetafields(client, [{ ownerType: "MARKET", namespace: "custom" }])).resolves.toEqual([]);
+    });
+
+    it("degrades to no guard when the scopes query itself fails", async () => {
+      const { client } = fakeStore({ PRODUCT: [[]] }, { scopes: "error" });
+      await expect(pullMetafields(client, [{ ownerType: "PRODUCT", namespace: "custom" }])).resolves.toEqual([]);
+    });
+
+    it("checks scopes once and names every affected owner in one error", async () => {
+      const { client, scopeQueries } = fakeStore({ PRODUCT: [[]], CUSTOMER: [[]] }, { scopes: [] });
+      const run = pullMetafields(client, [
+        { ownerType: "PRODUCT", namespace: "custom" },
+        { ownerType: "CUSTOMER", namespace: "custom" },
+      ]);
+      await expect(run).rejects.toThrow(/read_products[\s\S]*read_customers/);
+      expect(scopeQueries()).toBe(1);
+    });
   });
 
   it("normalizes pin from pinnedPosition and strips null access keys", async () => {
