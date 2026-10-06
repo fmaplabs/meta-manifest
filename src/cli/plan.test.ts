@@ -122,6 +122,66 @@ describe("planMetafieldsFor", () => {
     expect(definitions[0].name).toBe("careGuide");
   });
 
+  it("warns when a merchant-scoped metafield would orphan an existing app-owned definition", async () => {
+    // The declared (PRODUCT, custom) pair is empty remotely (→ create); the app's
+    // own reserved namespace still holds a definition with the same key.
+    const shadow = metafieldNode({
+      namespace: "app--1",
+      key: "careGuide",
+      name: "careGuide",
+      type: { name: "single_line_text_field" },
+      validations: [],
+      access: null,
+    });
+    const client: AdminGraphQLClient = async (query) => {
+      if (query === CURRENT_APP_QUERY) {
+        return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/1" } } } };
+      }
+      return { data: { metafieldDefinitions: { nodes: [shadow], pageInfo: { hasNextPage: false, endCursor: null } } } };
+    };
+    const set = defineMetafields("product", { scope: "merchant", fields: { careGuide: m.text() } });
+    const { plan, warnings } = await planMetafieldsFor(client, [set], []);
+    expect(plan.map((op) => op.kind)).toEqual(["createMetafield"]);
+    expect(warnings.some((w) => w.includes("orphaned"))).toBe(true);
+  });
+
+  it("does not pull the app shadow when no merchant create is planned", async () => {
+    const remoteCustom = metafieldNode({
+      namespace: "custom",
+      key: "careGuide",
+      name: "careGuide",
+      type: { name: "single_line_text_field" },
+      validations: [],
+      access: null,
+    });
+    const calls: string[] = [];
+    const client: AdminGraphQLClient = async (query) => {
+      if (query === CURRENT_APP_QUERY) {
+        calls.push("currentApp");
+        return { data: { currentAppInstallation: { app: { id: "gid://shopify/App/1" } } } };
+      }
+      calls.push("pullMetafieldDefinitions");
+      return { data: { metafieldDefinitions: { nodes: [remoteCustom], pageInfo: { hasNextPage: false, endCursor: null } } } };
+    };
+    const set = defineMetafields("product", { scope: "merchant", fields: { careGuide: m.text() } });
+    const { plan, warnings } = await planMetafieldsFor(client, [set], []);
+    expect(plan).toEqual([]);
+    expect(warnings).toEqual([]);
+    // One page-walk for the declared pair; the in-sync plan needs no shadow pull (and no app id).
+    expect(calls).toEqual(["pullMetafieldDefinitions"]);
+  });
+
+  it("skips the shadow check when the app id cannot be resolved, rather than failing the plan", async () => {
+    const client: AdminGraphQLClient = async (query) => {
+      if (query === CURRENT_APP_QUERY) return { data: { currentAppInstallation: null } };
+      return { data: { metafieldDefinitions: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } };
+    };
+    const set = defineMetafields("product", { scope: "merchant", fields: { careGuide: m.text() } });
+    const { plan, warnings } = await planMetafieldsFor(client, [set], []);
+    expect(plan.map((op) => op.kind)).toEqual(["createMetafield"]);
+    expect(warnings).toEqual([]);
+  });
+
   it("rewrites pulled GID-form reference validations to type-form before diffing", async () => {
     const client: AdminGraphQLClient = async (query) => {
       if (query === CURRENT_APP_QUERY) {

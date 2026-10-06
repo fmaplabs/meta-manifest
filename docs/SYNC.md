@@ -318,7 +318,15 @@ Semantics worth knowing:
   before entries. Within metafields no ordering is needed — they cannot reference
   each other. Merchant-scoped `m.ref` targets are sent as definition GIDs
   (`metaobject_definition_id`), resolved from the metaobject phase's pulled and
-  just-created ids.
+  just-created ids. A metafield whose reference target's metaobject create did
+  not apply this run is reported `blocked` (not sent), like entries under a
+  failed definition.
+- **Scope flips orphan, like metaobjects.** `namespace` is part of a
+  definition's identity, so flipping a set from app to merchant scope moves it
+  from `$app` to `"custom"`: the diff plans a fresh create and the app-owned
+  definition — whose pair is no longer declared, hence no longer managed — is
+  left behind with its values. `mm diff`/`push` warn when they detect this;
+  migration is manual, as with metaobject scope changes above.
 - **`required` is local-typing-only.** Metafield definitions have no required
   concept; `required: true` on a builder affects `Infer` and `encode`/`parse` and
   is excluded from the definition diff.

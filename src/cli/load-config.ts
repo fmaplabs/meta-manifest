@@ -4,7 +4,8 @@ import { validateConfig } from "../config";
 import type { Config } from "../config";
 import { isMetaobjectSchema } from "../define";
 import { isMetafieldSet } from "../metafields";
-import type { AnyEntries, AnyMetafieldSet, AnySchema } from "../index";
+import { effectiveNamespace } from "../sync/resolve";
+import type { AnyEntries, AnyMetafieldSet, AnySchema, ScopeConfig } from "../index";
 
 const jiti = createJiti(import.meta.url);
 
@@ -86,15 +87,17 @@ export async function loadEntries(entriesPath: string): Promise<AnyEntries[]> {
 /**
  * Load the `metafields` export (an array of `defineMetafields(...)` sets) from the main
  * metafields module. Duplicate `(ownerType, namespace, key)` across all sets is rejected
- * here, on the declared namespace (the `$app` sentinel included), before any network call.
+ * here, on the *effective* namespace (a merchant scope resolves the `$app` sentinel to
+ * `"custom"`, so a default-namespace set can collide with an explicit `"custom"` one),
+ * before any network call.
  */
-export async function loadMetafields(metafieldsPath: string): Promise<AnyMetafieldSet[]> {
+export async function loadMetafields(metafieldsPath: string, config: ScopeConfig = {}): Promise<AnyMetafieldSet[]> {
   const abs = resolve(process.cwd(), metafieldsPath);
   const mod = await jiti.import<{ metafields?: unknown }>(abs);
   if (!Array.isArray(mod.metafields)) {
     throw new Error(`Metafields module "${metafieldsPath}" must export a \`metafields\` array.`);
   }
-  const seen = new Map<string, number>();
+  const seen = new Map<string, { index: number; declared: string }>();
   mod.metafields.forEach((set, i) => {
     if (!isMetafieldSet(set)) {
       throw new Error(
@@ -103,16 +106,21 @@ export async function loadMetafields(metafieldsPath: string): Promise<AnyMetafie
           `metafields module and list it in \`metafields\`.`,
       );
     }
+    const namespace = effectiveNamespace(set.namespace, set.scope ?? config.scope ?? "app");
     for (const key of Object.keys(set.fields as Record<string, unknown>)) {
-      const identity = `${set.owner}.${set.namespace}.${key}`;
+      const identity = `${set.owner}.${namespace}.${key}`;
       const first = seen.get(identity);
       if (first !== undefined) {
+        // Only a merchant scope rewrites a namespace; name the rewrite so a collision
+        // that is invisible in the declarations ("$app" vs "custom") is explainable.
+        const rewritten = [first.declared, set.namespace].find((declared) => declared !== namespace);
+        const hint = rewritten === undefined ? "" : ` ("${rewritten}" resolves to "${namespace}" under the merchant scope)`;
         throw new Error(
           `Duplicate metafield "${identity}" in "${metafieldsPath}" — ` +
-            `metafields[${first}] and metafields[${i}] both declare it.`,
+            `metafields[${first.index}] and metafields[${i}] both declare it${hint}.`,
         );
       }
-      seen.set(identity, i);
+      seen.set(identity, { index: i, declared: set.namespace });
     }
   });
   return mod.metafields as AnyMetafieldSet[];

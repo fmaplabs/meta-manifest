@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { AdminGraphQLClient } from "../index";
 import {
   CREATE_DEFINITION_MUTATION,
@@ -176,12 +176,42 @@ describe("runDiff / runPush with metafields", () => {
     ]);
   });
 
+  it("a failed definition create blocks metafields that reference it (exit-code-2 path)", async () => {
+    const { client, calls } = fakeStore({ failCreateDefinition: true });
+    const RefSet = defineMetafields("product", { fields: { author: m.ref(A) } });
+    const result = await runPush({ client, schemas: [A], metafields: [RefSet] });
+    expect(result.ok).toBe(false);
+    expect(result.metafields?.results[0]).toMatchObject({
+      status: "blocked",
+      reason: expect.stringContaining('"$app:a"'),
+    });
+    expect(calls).not.toContain("createMetafieldDefinition");
+  });
+
   it("runPush gates destructive metafield ops behind allowDestructive and stays ok", async () => {
     const { client, calls } = fakeStore({ remoteMetafieldNodes: [remoteMetafieldNode()] });
     const result = await runPush({ client, schemas: [A], metafields: [MF] });
     expect(result.ok).toBe(true);
     expect(result.metafields?.counts.skipped).toBe(1);
     expect(calls).not.toContain("deleteMetafieldDefinition");
+  });
+
+  it("runDiff and runPush surface metafield scope-flip warnings", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // The app's reserved namespace still holds "careGuide" while the set is now
+      // merchant-scoped — its create must come with an orphaning warning.
+      const MerchantMF = defineMetafields("product", { scope: "merchant", fields: { careGuide: m.text() } });
+      const nodes = [remoteMetafieldNode({ key: "careGuide", name: "careGuide" })];
+      await runDiff({ client: fakeStore({ remoteMetafieldNodes: nodes }).client, schemas: [A], metafields: [MerchantMF] });
+      expect(warn.mock.calls.some((c) => String(c[0]).includes("orphaned"))).toBe(true);
+
+      warn.mockClear();
+      await runPush({ client: fakeStore({ remoteMetafieldNodes: nodes }).client, schemas: [A], metafields: [MerchantMF] });
+      expect(warn.mock.calls.some((c) => String(c[0]).includes("orphaned"))).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("runPush applies destructive metafield removes with allowDestructive", async () => {

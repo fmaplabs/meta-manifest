@@ -53,6 +53,14 @@ export async function runPush(args: {
 
   let destructiveSkipped = !args.allowDestructive && plan.some(isDestructive);
 
+  // Types whose create did not apply gate the metafield ops that reference them
+  // and the entry ops that live under them.
+  const failedDefinitionTypes = new Set(
+    result.results
+      .filter((r) => r.op.kind === "createDefinition" && r.status !== "applied")
+      .map((r) => r.op.type),
+  );
+
   // Metafield definitions push after metaobject creates (a metaobject_reference
   // metafield needs its target definition) and before entries. [design §2.7]
   let metafieldsResult: MetafieldPushResult | undefined;
@@ -70,10 +78,16 @@ export async function runPush(args: {
     const metafieldPlan = await planMetafieldsFor(args.client, args.metafields, args.schemas, args.config, {
       metaobjectTypeById,
     });
+    for (const w of metafieldPlan.warnings) console.warn(`Warning: ${w}`);
     metafieldsResult = await pushMetafields(
       args.client,
       metafieldPlan.plan,
-      { definitions: metafieldPlan.definitions, remote: metafieldPlan.remote, metaobjectIdsByType },
+      {
+        definitions: metafieldPlan.definitions,
+        remote: metafieldPlan.remote,
+        metaobjectIdsByType,
+        failedMetaobjectTypes: failedDefinitionTypes,
+      },
       { allowDestructive: args.allowDestructive },
     );
     for (const r of metafieldsResult.results) console.log(`  ${describeMetafieldResult(r)}`);
@@ -90,13 +104,7 @@ export async function runPush(args: {
 
   let entriesResult: EntryPushResult | undefined;
   if (args.entries) {
-    // Entry planning runs after the definitions push so just-created definitions
-    // exist. Types whose create failed or blocked gate their entry ops.
-    const failedDefinitionTypes = new Set(
-      result.results
-        .filter((r) => r.op.kind === "createDefinition" && r.status !== "applied")
-        .map((r) => r.op.type),
-    );
+    // Entry planning runs after the definitions push so just-created definitions exist.
     const entryPlan = await planEntriesFor(args.client, args.entries, args.schemas, args.config, {
       pendingCreateTypes: failedDefinitionTypes,
     });

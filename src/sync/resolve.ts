@@ -135,7 +135,7 @@ export interface LocalMetafieldDefinition {
 }
 
 /** Declared `namespace` verbatim; the bare `$app` sentinel resolves by scope. [design §6] */
-function effectiveNamespace(namespace: string, scope: Scope): string {
+export function effectiveNamespace(namespace: string, scope: Scope): string {
   if (namespace !== APP_NAMESPACE) return namespace;
   return scope === "merchant" ? "custom" : APP_NAMESPACE;
 }

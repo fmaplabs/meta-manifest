@@ -209,6 +209,62 @@ describe("pushMetafields — destructive gating", () => {
   });
 });
 
+describe("pushMetafields — failed metaobject dependencies", () => {
+  const refDef = (overrides: Partial<LocalMetafieldDefinition> = {}) =>
+    local({ type: "metaobject_reference", validations: [{ name: "metaobject_definition_type", value: "$app:a" }], ...overrides });
+
+  it("blocks a create whose reference target failed to create, instead of sending it", async () => {
+    const { client, calls } = fakeStore();
+    const result = await pushMetafields(client, [createOp], {
+      definitions: [refDef()],
+      remote: [],
+      failedMetaobjectTypes: new Set(["$app:a"]),
+    });
+    expect(result.results[0]).toMatchObject({ status: "blocked", reason: expect.stringContaining('"$app:a"') });
+    expect(calls).toEqual([]);
+    expect(result.ok).toBe(false);
+  });
+
+  it("blocks a create referencing a failed target through a mixed-reference types list", async () => {
+    const { client, calls } = fakeStore();
+    const def = local({
+      type: "mixed_reference",
+      validations: [{ name: "metaobject_definition_types", value: JSON.stringify(["$app:ok", "$app:a"]) }],
+    });
+    const result = await pushMetafields(client, [createOp], {
+      definitions: [def],
+      remote: [],
+      failedMetaobjectTypes: new Set(["$app:a"]),
+    });
+    expect(result.results[0]).toMatchObject({ status: "blocked" });
+    expect(calls).toEqual([]);
+  });
+
+  it("blocks a validations update whose new reference target failed to create", async () => {
+    const { client, calls } = fakeStore();
+    const op: MetafieldOp = { kind: "updateMetafield", ownerType: "PRODUCT", namespace: "$app", key: "a", changes: ["validations"] };
+    const result = await pushMetafields(client, [op], {
+      definitions: [refDef()],
+      remote: [remote({ type: "metaobject_reference" })],
+      failedMetaobjectTypes: new Set(["$app:a"]),
+    });
+    expect(result.results[0]).toMatchObject({ status: "blocked" });
+    expect(calls).toEqual([]);
+  });
+
+  it("does not block an update that leaves validations untouched", async () => {
+    const { client, calls } = fakeStore();
+    const op: MetafieldOp = { kind: "updateMetafield", ownerType: "PRODUCT", namespace: "$app", key: "a", changes: ["name"] };
+    const result = await pushMetafields(client, [op], {
+      definitions: [refDef({ name: "New" })],
+      remote: [remote({ type: "metaobject_reference" })],
+      failedMetaobjectTypes: new Set(["$app:a"]),
+    });
+    expect(result.results[0]).toMatchObject({ status: "applied" });
+    expect(calls.map((c) => c.kind)).toEqual(["update"]);
+  });
+});
+
 describe("pushMetafields — metaobject reference targets", () => {
   it("rewrites merchant-scope ref validations to GID form via metaobjectIdsByType", async () => {
     const { client, calls } = fakeStore();

@@ -8,7 +8,7 @@ import {
 } from "./client";
 import type { MetafieldChange, MetafieldOp } from "./metafield-diff";
 import type { PulledMetafieldDefinition } from "./metafield-pull";
-import { refValidationsToIds } from "./ref-validations";
+import { referencedMetaobjectTypes, refValidationsToIds } from "./ref-validations";
 import type { LocalMetafieldDefinition, MetafieldCapabilities } from "./resolve";
 
 export interface MetafieldPushOptions {
@@ -106,24 +106,35 @@ export async function pushMetafields(
     remote: PulledMetafieldDefinition[];
     /** Metaobject type → definition GID (pulled + created this run), for merchant-scope ref targets. */
     metaobjectIdsByType?: ReadonlyMap<string, string>;
+    /** Metaobject types whose definition create did not apply this run — ops whose validations reference one are blocked. */
+    failedMetaobjectTypes?: ReadonlySet<string>;
   },
   options?: MetafieldPushOptions,
 ): Promise<MetafieldPushResult> {
   const allowDestructive = options?.allowDestructive ?? false;
   const keyOf = (d: { ownerType: string; namespace: string; key: string }) => `${d.ownerType}/${d.namespace}/${d.key}`;
   const idsByType = sources.metaobjectIdsByType ?? new Map<string, string>();
-  // Merchant-scope reference targets must be GID-form at the store boundary (see ref-validations.ts).
+  const failedTypes = sources.failedMetaobjectTypes ?? new Set<string>();
+  // Merchant-scope reference targets must be GID-form at the store boundary (see
+  // ref-validations.ts). Applied at the payload sites so the blocked-dependency
+  // check below still sees the canonical type-form validations.
   const withRefIds = (def: LocalMetafieldDefinition): LocalMetafieldDefinition => ({
     ...def,
     validations: refValidationsToIds(def.validations, idsByType),
   });
-  const defByKey = new Map(sources.definitions.map((d) => [keyOf(d), withRefIds(d)]));
+  const defByKey = new Map(sources.definitions.map((d) => [keyOf(d), d]));
   const remoteByKey = new Map(sources.remote.map((d) => [keyOf(d), d]));
+
+  /** A reference target whose metaobject create did not apply — sending it would only surface a userError. */
+  function failedRefTarget(def: LocalMetafieldDefinition): string | undefined {
+    if (failedTypes.size === 0) return undefined;
+    return referencedMetaobjectTypes(def.validations).find((t) => failedTypes.has(t));
+  }
 
   async function create(op: MetafieldOp, def: LocalMetafieldDefinition): Promise<MetafieldPushOpResult> {
     const data = await execute<{
       metafieldDefinitionCreate: { createdDefinition?: { id?: string } | null; userErrors: UserError[] };
-    }>(client, CREATE_METAFIELD_DEFINITION_MUTATION, { definition: createInput(def) });
+    }>(client, CREATE_METAFIELD_DEFINITION_MUTATION, { definition: createInput(withRefIds(def)) });
     const payload = data.metafieldDefinitionCreate;
     if (payload.userErrors.length) return { op, status: "failed", userErrors: payload.userErrors };
     return { op, status: "applied", id: payload.createdDefinition?.id };
@@ -151,15 +162,19 @@ export async function pushMetafields(
       case "createMetafield": {
         const def = defByKey.get(keyOf(op));
         if (!def) return { op, status: "blocked", reason: `no local definition for "${keyOf(op)}"` };
+        const failedRef = failedRefTarget(def);
+        if (failedRef) return { op, status: "blocked", reason: `referenced metaobject definition "${failedRef}" was not created` };
         return create(op, def);
       }
       case "updateMetafield": {
         const def = defByKey.get(keyOf(op));
         if (!def) return { op, status: "blocked", reason: `no local definition for "${keyOf(op)}"` };
+        const failedRef = op.changes.includes("validations") ? failedRefTarget(def) : undefined;
+        if (failedRef) return { op, status: "blocked", reason: `referenced metaobject definition "${failedRef}" was not created` };
         const data = await execute<{
           metafieldDefinitionUpdate: { updatedDefinition?: { id?: string } | null; userErrors: UserError[] };
         }>(client, UPDATE_METAFIELD_DEFINITION_MUTATION, {
-          definition: updateInput(def, op.changes, remoteByKey.get(keyOf(op))),
+          definition: updateInput(withRefIds(def), op.changes, remoteByKey.get(keyOf(op))),
         });
         const payload = data.metafieldDefinitionUpdate;
         if (payload.userErrors.length) return { op, status: "failed", userErrors: payload.userErrors };
@@ -171,6 +186,9 @@ export async function pushMetafields(
         // `type` is immutable: delete (wiping app-reserved values), then recreate. [design §6]
         const def = defByKey.get(keyOf(op));
         if (!def) return { op, status: "blocked", reason: `no local definition for "${keyOf(op)}"` };
+        // Checked before the delete: a doomed recreate must not wipe the old definition.
+        const failedRef = failedRefTarget(def);
+        if (failedRef) return { op, status: "blocked", reason: `referenced metaobject definition "${failedRef}" was not created` };
         const deleted = await remove(op);
         if (deleted.status !== "applied") return deleted;
         return create(op, def);

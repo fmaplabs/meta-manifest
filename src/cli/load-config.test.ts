@@ -155,6 +155,31 @@ describe("loadConfig / loadSchemas", () => {
     await expect(loadMetafields(file)).rejects.toThrow(/Duplicate metafield .*PRODUCT.*\$app.*color/);
   });
 
+  it("rejects sets whose namespaces collide only under a merchant config scope", async () => {
+    // Default namespace ($app) resolves to "custom" under merchant scope, colliding
+    // with the explicit "custom" set — invisible to a declared-namespace check.
+    const file = tmp("metafields.ts",
+      `import { defineMetafields, m } from ${idx};
+       export const metafields = [
+         defineMetafields("product", { fields: { color: m.color() } }),
+         defineMetafields("product", { namespace: "custom", fields: { color: m.text() } }),
+       ];`);
+    await expect(loadMetafields(file, { scope: "merchant" })).rejects.toThrow(
+      /Duplicate metafield .*PRODUCT.*custom.*color.*merchant scope/s,
+    );
+  });
+
+  it("still allows a default-namespace set alongside an explicit custom set under app scope", async () => {
+    const file = tmp("metafields.ts",
+      `import { defineMetafields, m } from ${idx};
+       export const metafields = [
+         defineMetafields("product", { fields: { color: m.color() } }),
+         defineMetafields("product", { namespace: "custom", fields: { color: m.text() } }),
+       ];`);
+    const sets = await loadMetafields(file, { scope: "app" });
+    expect(sets).toHaveLength(2);
+  });
+
   it("allows the same key on different owners or namespaces", async () => {
     const file = tmp("metafields.ts",
       `import { defineMetafields, m } from ${idx};

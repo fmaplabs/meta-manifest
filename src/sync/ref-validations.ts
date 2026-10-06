@@ -52,6 +52,28 @@ export function refValidationsToIds(
 }
 
 /**
+ * The metaobject types a field's type-form reference validations target —
+ * `metaobject_definition_type` plus each element of the
+ * `metaobject_definition_types` JSON array. GID-form targets (already-existing
+ * definitions) are not reported; a malformed array value is skipped.
+ */
+export function referencedMetaobjectTypes(validations: FieldValidation[]): string[] {
+  const out: string[] = [];
+  for (const v of validations) {
+    if (v.name === "metaobject_definition_type") out.push(v.value);
+    else if (v.name === "metaobject_definition_types") {
+      try {
+        const parsed: unknown = JSON.parse(v.value);
+        if (Array.isArray(parsed)) out.push(...parsed.filter((t): t is string => typeof t === "string"));
+      } catch {
+        // Leave a malformed validation value for the API to report.
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Rewrite GID-form reference targets on a pulled definition back to the
  * canonical type-form so `diff()` compares against the schema's canon. A GID
  * outside `typeById` (an unmanaged definition) passes through unchanged.

@@ -70,7 +70,7 @@ export async function main(argv: string[]): Promise<number> {
       let metafields: { path: string; sets: Awaited<ReturnType<typeof loadMetafields>>; config: typeof config } | undefined;
       if (config.metafields) {
         try {
-          metafields = { path: config.metafields, sets: await loadMetafields(config.metafields), config };
+          metafields = { path: config.metafields, sets: await loadMetafields(config.metafields, config), config };
         } catch (e) {
           console.warn(
             `Skipping metafields pull — could not load "${config.metafields}": ${e instanceof Error ? e.message : String(e)}`,
@@ -82,7 +82,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     const schemas = await loadSchemas(config.schema);
     const entries = config.entries ? await loadEntries(config.entries) : undefined;
-    const metafields = config.metafields ? await loadMetafields(config.metafields) : undefined;
+    const metafields = config.metafields ? await loadMetafields(config.metafields, config) : undefined;
     if (args.command === "diff") {
       await runDiff({ client, schemas, entries, metafields, config });
       return 0;

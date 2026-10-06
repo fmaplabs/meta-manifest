@@ -26,6 +26,7 @@ export async function runDiff(args: {
     const metafieldPlan = await planMetafieldsFor(args.client, args.metafields, args.schemas, args.config, {
       metaobjectTypeById,
     });
+    for (const w of metafieldPlan.warnings) console.warn(`Warning: ${w}`);
     metafieldOps = metafieldPlan.plan;
     if (metafieldOps.length === 0) {
       console.log("Metafields are in sync — nothing to apply.");

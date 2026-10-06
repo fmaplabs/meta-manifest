@@ -29,9 +29,13 @@ import {
   resolveEntries,
   resolveMetafieldSets,
 } from "../index";
+import { APP_NAMESPACE, SyncTransportError } from "../index";
+import { metafieldOwnerKey } from "../metafields";
 import type { AnySchema } from "../index";
 
 const APP_PREFIX = "$app:";
+/** Where the bare `$app` metafield namespace lands under a merchant scope. */
+const MERCHANT_NAMESPACE = "custom";
 
 export interface Plan {
   plan: DiffOp[];
@@ -103,6 +107,49 @@ export interface MetafieldPlan {
   /** Resolved local definitions — reused by `pushMetafields` to build payloads. */
   definitions: LocalMetafieldDefinition[];
   remote: PulledMetafieldDefinition[];
+  warnings: string[];
+}
+
+/**
+ * The metafield counterpart of `detectScopeFlips`: a definition flipped from app
+ * to merchant scope moves from the `$app` namespace to `"custom"`, so the diff
+ * plans a fresh create and the app-owned definition is silently orphaned (the
+ * old pair is no longer declared, hence no longer managed). Detect the orphan —
+ * it is app-owned, so unambiguously ours — only where a create is actually
+ * planned; migration is manual. [design §13]
+ */
+async function detectMetafieldScopeFlips(
+  client: AdminGraphQLClient,
+  definitions: LocalMetafieldDefinition[],
+  plan: MetafieldOp[],
+): Promise<string[]> {
+  const keyOf = (d: { ownerType: string; namespace: string; key: string }) => `${d.ownerType}/${d.namespace}/${d.key}`;
+  const created = new Set(plan.filter((op) => op.kind === "createMetafield").map(keyOf));
+  const candidates = definitions.filter((d) => d.namespace === MERCHANT_NAMESPACE && created.has(keyOf(d)));
+  if (candidates.length === 0) return [];
+  const owners = [...new Set(candidates.map((d) => d.ownerType))];
+  let shadows: PulledMetafieldDefinition[];
+  try {
+    shadows = await pullMetafields(client, owners.map((ownerType) => ({ ownerType, namespace: APP_NAMESPACE })));
+  } catch (err) {
+    // Best-effort check: without a resolvable app id, "ours" cannot be told apart
+    // from another app's reserved namespace — skip rather than fail the plan.
+    if (err instanceof SyncTransportError) throw err;
+    return [];
+  }
+  const shadowKeys = new Set(shadows.map((s) => `${s.ownerType}/${s.key}`));
+  const warnings: string[] = [];
+  for (const d of candidates) {
+    if (!shadowKeys.has(`${d.ownerType}/${d.key}`)) continue;
+    const owner = metafieldOwnerKey(d.ownerType) ?? d.ownerType;
+    warnings.push(
+      `"${owner}.${MERCHANT_NAMESPACE}.${d.key}" is merchant-scoped but an app-owned "${owner}.${APP_NAMESPACE}.${d.key}" ` +
+        `already exists remotely. Scope changes are not migrated (the namespace is part of the identity): a new ` +
+        `"${MERCHANT_NAMESPACE}" definition will be created and the app-owned one left orphaned. ` +
+        `Migrate manually — see docs/SYNC.md.`,
+    );
+  }
+  return warnings;
 }
 
 /**
@@ -125,7 +172,9 @@ export async function planMetafieldsFor(
   const remote = typeById
     ? pulled.map((d) => ({ ...d, validations: refValidationsToTypes(d.validations, typeById) }))
     : pulled;
-  return { plan: diffMetafields(definitions, remote, pairs), definitions, remote };
+  const plan = diffMetafields(definitions, remote, pairs);
+  const warnings = await detectMetafieldScopeFlips(client, definitions, plan);
+  return { plan, definitions, remote, warnings };
 }
 
 /** Resolve scope, pull the effective types, normalize, and diff local↔remote. */
