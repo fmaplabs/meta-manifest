@@ -1,8 +1,8 @@
 # meta-manifest
 
-A zero-dependency, zod-style builder for Shopify **metaobject definitions**, plus a CLI
-(`mm` / `meta-manifest`) that keeps a store's definitions in sync with schema declared in code.
-Think [tento](https://github.com/drizzle-team/tento), but scoped to metaobject-definition
+A zero-dependency, zod-style builder for Shopify **metaobject & metafield definitions**, plus a
+CLI (`mm` / `meta-manifest`) that keeps a store's definitions in sync with schema declared in code.
+Think [tento](https://github.com/drizzle-team/tento), but scoped to definition
 schema/migrations rather than a runtime query client (see [Roadmap](#roadmap-runtime-query-client)
 below).
 
@@ -351,8 +351,10 @@ environment variables take precedence). The token needs the `read_metaobject_def
 `pull`/`diff`, and `write_metaobject_definitions` (which implies read) for `push`. When `entries`
 is configured, it additionally needs `read_metaobjects` for `diff` and `write_metaobjects` for
 `push`. When `metafields` is configured, it needs each declared owner resource's scopes
-(e.g. `read_products`/`write_products` for product metafields) — see the scope matrix and the
-silent-empty-read warning in [`CLI.md`](./docs/CLI.md).
+(e.g. `read_products`/`write_products` for product metafields) — see the scope matrix in
+[`CLI.md`](./docs/CLI.md). Shopify signals a missing owner read scope with an *empty* result
+rather than an error; for the common owners the CLI detects this and fails with the missing
+scope named instead of planning spurious re-creates.
 
 ### Commands
 

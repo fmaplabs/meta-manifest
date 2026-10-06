@@ -29,7 +29,7 @@ export function parseArgs(argv: string[]): Args {
   return args;
 }
 
-const HELP = `meta-manifest — sync Shopify metaobject definitions
+const HELP = `meta-manifest — sync Shopify metaobject & metafield definitions
 
 Usage: mm <command> [options]
 
@@ -40,7 +40,8 @@ Commands:
   push                 Apply local schema to the store
 
 When \`metafields\` is set in the config, diff and push also reconcile the
-declared metafield definitions (after metaobject definitions, before entries).
+declared metafield definitions (after metaobject definitions, before entries),
+and pull re-pulls the declared pairs and regenerates the metafields module.
 When \`entries\` is set, diff and push also plan and upsert the declared seed
 entries (after definitions). Entries are never deleted.
 

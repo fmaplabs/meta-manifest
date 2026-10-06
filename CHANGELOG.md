@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- **Metafield-definition sync.** Declare typed metafield definitions on Shopify owner
+  resources (product, customer, order, company, …) with `defineMetafields`, reusing the same
+  `m.*` field builders as metaobjects. Point the config's `metafields` at the module and
+  `diff`/`push` reconcile the declared definitions — after metaobject definitions (so
+  `m.ref` targets exist), before entries — keyed by `(ownerType, namespace, key)`; `pull`
+  re-pulls the declared pairs and regenerates the metafields module. App scope resolves to
+  the `$app` reserved namespace and merchant scope to `custom`; only the *current* app's
+  `app--<id>` spelling canonicalizes to `$app`, so other apps' definitions are never
+  mistaken for managed ones. Type changes and undeclared-definition removes are destructive
+  and gated behind `--allow-destructive` (deletes inside an app-reserved namespace always
+  send `deleteAllAssociatedMetafields: true` — Shopify requires it, and the plan says so).
+  See `docs/CLI.md` and `docs/SYNC.md`.
+- **Token-scope empty-pull guard.** Shopify answers a metafield-definition read the token
+  isn't scoped for with an *empty* list, not an error — which a diff would read as "nothing
+  exists remotely" and plan to re-create everything. When an owner type's pull comes back
+  empty, the CLI now checks the token's granted scopes (`currentAppInstallation {
+  accessScopes }`) and fails naming the missing `read_*` scope instead of trusting the
+  result. Covers the owners with documented scope mappings (products/customers/orders/
+  companies groups); write counts as read, and an unreadable scope list degrades to no
+  guard rather than a false block.
+- **Metafield/metaobject parity fixes.** Flipping a metafield set from app to merchant
+  scope now warns about the app-owned definitions it would orphan, like metaobject scope
+  flips; two sets resolving to the same effective namespace (e.g. a default-namespace set
+  and an explicit `custom` set under merchant config scope) are rejected at load time as
+  duplicates, naming the rewrite; and metafields whose reference validations target a
+  metaobject type whose create failed this run report `blocked` instead of bouncing off
+  Shopify as userErrors (for type changes, before the delete — a doomed recreate can no
+  longer wipe the existing definition).
+- **New field builders:** `m.richText()`, `m.link()`, and `m.customer()` / `m.order()` /
+  `m.company()` / `m.companyLocation()` reference builders — all round-trip through `pull`
+  codegen.
+
+## 0.9.0
+
 - **Merchant-scope reference targets now push as definition GIDs.** Shopify's
   `metaobject_definition_type` validation only resolves app-reserved types, so
   `metaobjectDefinitionCreate`/`Update` rejected any `m.ref`/`m.mixedRef` pointing at a
@@ -13,6 +47,8 @@
   `refValidationsToTypes` helpers exported from the library root. App-reserved (`$app:`) ref
   targets keep the documented type-form behavior.
 
+## 0.8.0
+
 - **Multi-file schema declaration.** Declare each metaobject in its own module as
   `export default defineMetaobject(...)` and import them into the main schema module's
   `schemas` array; entry sets can be split the same way (`export default defineEntries(...)`
@@ -22,6 +58,23 @@
   duplicate. New `isMetaobjectSchema` type guard exported from the library root. `mm init`
   scaffolds the multi-file layout (`src/metaobjects/author.ts` + an aggregating
   `src/schema.ts`).
+
+## 0.7.0
+
+Version bump only (republish of 0.6.0).
+
+## 0.6.0
+
+- **Code-first metaobject entry management (upsert-only seed sync).** Declare seed entries
+  with `defineEntries`, wire the module up via `entries` in the config, and `diff`/`push`
+  plan and upsert them after definitions. Entries are never deleted.
+
+## 0.5.0
+
+Version bump only (republish of 0.4.0).
+
+## 0.4.0
+
 - **`m.mixedRef([...])`** — a mixed-reference field that can point at several metaobject
   types (Shopify's `mixed_reference`), plus `m.list(m.mixedRef([...]))` for the list form
   (`list.mixed_reference`). Round-trips through `pull` codegen (emitted as lazy thunks) and
@@ -31,6 +84,18 @@
   follow-up `metaobjectDefinitionUpdate` to add them once every member exists. Non-create
   ops run last so they can target types created this run. A cycle member whose create fails
   still leaves the ref fields pointing at it `blocked`.
+
+## 0.3.0
+
+- **Metaobject configuration options.** Beyond fields, `defineMetaobject` accepts and
+  reconciles definition metadata — `displayName`, `description`, `access`, `capabilities`,
+  and app/merchant `scope` (with a store-wide default via `defineConfig`) — mapped into
+  create payloads, drift-reconciled by `diff`/`push`, and round-tripped by `pull` codegen.
+
+## 0.2.0
+
+- `.env` loading for the Admin token; package renamed to `@fmaplabs/meta-manifest` with npm
+  release setup; codegen emits lazy `m.ref` thunks; `push` exits `2` on `blocked` ops.
 
 ## 0.1.0
 
