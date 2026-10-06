@@ -15,7 +15,7 @@ export type Scope = "app" | "merchant";
 const APP_PREFIX = "$app:";
 
 /** Per-metaobject `scope` → global `config.scope` → `"app"`. [design §6] */
-function effectiveScope(schema: AnySchema, config: ScopeConfig): Scope {
+export function effectiveScope(schema: AnySchema, config: ScopeConfig): Scope {
   return schema.config.scope ?? config.scope ?? "app";
 }
 

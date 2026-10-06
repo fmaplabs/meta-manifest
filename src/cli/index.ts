@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { SyncTransportError } from "../sync/client";
-import { createAdminClient } from "../node/client";
+import { selectAdminClient, cliAuthAppScopeNotice } from "./auth";
 import { loadConfig, loadEntries, loadMetafields, loadSchemas } from "./load-config";
 import { loadDotEnv } from "./load-env";
 import { runInit } from "./init";
@@ -12,16 +12,18 @@ export interface Args {
   command?: string;
   config?: string;
   allowDestructive: boolean;
+  allowCliAppScope: boolean;
   force: boolean;
   help: boolean;
 }
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { allowDestructive: false, force: false, help: false };
+  const args: Args = { allowDestructive: false, allowCliAppScope: false, force: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") args.help = true;
     else if (a === "--allow-destructive") args.allowDestructive = true;
+    else if (a === "--allow-cli-app-scope") args.allowCliAppScope = true;
     else if (a === "--force") args.force = true;
     else if (a === "--config") args.config = argv[++i];
     else if (!a.startsWith("-") && !args.command) args.command = a;
@@ -46,10 +48,18 @@ When \`entries\` is set, diff and push also plan and upsert the declared seed
 entries (after definitions). Entries are never deleted.
 
 Options:
-  --config <path>      Config file (default: meta-manifest.config.ts)
-  --allow-destructive  Apply destructive changes on push
-  --force              Overwrite schema on pull without warning
-  -h, --help           Show this help`;
+  --config <path>        Config file (default: meta-manifest.config.ts)
+  --allow-destructive    Apply destructive changes on push
+  --allow-cli-app-scope  Under auth: "cli", downgrade the app-scope error to a warning
+  --force                Overwrite schema on pull without warning
+  -h, --help             Show this help`;
+
+/** Enforce the CLI-auth app-scope guard: hard error, or a warning under --allow-cli-app-scope. */
+function enforceCliAppScope(notice: string | null, allow: boolean): void {
+  if (notice === null) return;
+  if (!allow) throw new Error(notice);
+  console.warn(notice);
+}
 
 export async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
@@ -64,9 +74,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     loadDotEnv();
     const config = await loadConfig(args.config);
-    if (config.auth === "cli") throw new Error(`auth: "cli" is not supported yet.`);
-    const client = createAdminClient(config);
+    const client = selectAdminClient(config);
     if (args.command === "pull") {
+      enforceCliAppScope(cliAuthAppScopeNotice({ config, command: "pull" }), args.allowCliAppScope);
       // Metafield re-pull needs the locally declared pairs; a missing/invalid
       // metafields module just means nothing is declared yet — skip with a note.
       let metafields: { path: string; sets: Awaited<ReturnType<typeof loadMetafields>>; config: typeof config } | undefined;
@@ -85,6 +95,12 @@ export async function main(argv: string[]): Promise<number> {
     const schemas = await loadSchemas(config.schema);
     const entries = config.entries ? await loadEntries(config.entries) : undefined;
     const metafields = config.metafields ? await loadMetafields(config.metafields, config) : undefined;
+    if (args.command === "diff" || args.command === "push") {
+      enforceCliAppScope(
+        cliAuthAppScopeNotice({ config, command: args.command, schemas, metafieldSets: metafields }),
+        args.allowCliAppScope,
+      );
+    }
     if (args.command === "diff") {
       await runDiff({ client, schemas, entries, metafields, config });
       return 0;
