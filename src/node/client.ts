@@ -2,6 +2,9 @@ import type { AdminGraphQLClient } from "../sync/client";
 import { SyncTransportError } from "../sync/client";
 import { DEFAULT_API_VERSION } from "../config";
 
+export { createCliAdminClient, buildExecuteArgs, extractJsonObject, CLI_SESSION_SCOPES } from "./cli-client";
+export type { RunCommand } from "./cli-client";
+
 /**
  * Build an AdminGraphQLClient that talks directly to a store using an Admin API
  * access token — the CLI's standalone equivalent of the app's session-based
