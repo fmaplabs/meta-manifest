@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import type { AdminGraphQLClient } from "../sync/client";
-import { SyncTransportError } from "../sync/client";
 import { DEFAULT_API_VERSION } from "../config";
 
 /**
@@ -41,28 +40,42 @@ export function buildExecuteArgs(
   return args;
 }
 
-/** Strip ANSI escapes, carriage returns, and the CLI's error-box drawing characters. */
-function clean(text: string): string {
+/** Strip ANSI escapes and carriage returns. */
+function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "").replace(/[│╭╮╰╯─]/g, "");
+  return text.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "");
+}
+
+/** Additionally strip the CLI's error-box drawing characters. */
+function stripBox(text: string): string {
+  return stripAnsi(text).replace(/[│╭╮╰╯─]/g, "");
+}
+
+function parseBraceSlice(text: string): unknown | undefined {
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first === -1 || last <= first) return undefined;
+  try {
+    return JSON.parse(text.slice(first, last + 1));
+  } catch {
+    return undefined;
+  }
 }
 
 /**
  * Pull the first JSON object out of noisy CLI output (progress lines, ANSI
- * codes, error boxes). Returns undefined when nothing parses.
+ * codes, error boxes). Attempts, in order: the raw braced slice (so clean JSON
+ * keeps any box-drawing characters inside its string values); each line that
+ * is itself an object; the slice with box chars stripped; and finally that
+ * slice with wrapped lines rejoined — the error box wraps long lines, which
+ * leaves raw newlines inside JSON string literals. Returns undefined when
+ * nothing parses.
  */
 export function extractJsonObject(text: string): unknown | undefined {
-  const cleaned = clean(text);
-  const first = cleaned.indexOf("{");
-  const last = cleaned.lastIndexOf("}");
-  if (first !== -1 && last > first) {
-    try {
-      return JSON.parse(cleaned.slice(first, last + 1));
-    } catch {
-      // fall through to per-line scan
-    }
-  }
-  for (const line of cleaned.split("\n")) {
+  const base = stripAnsi(text);
+  const direct = parseBraceSlice(base);
+  if (direct !== undefined) return direct;
+  for (const line of base.split("\n")) {
     if (line.trimStart().startsWith("{")) {
       try {
         return JSON.parse(line);
@@ -71,7 +84,8 @@ export function extractJsonObject(text: string): unknown | undefined {
       }
     }
   }
-  return undefined;
+  const unboxed = stripBox(base);
+  return parseBraceSlice(unboxed) ?? parseBraceSlice(unboxed.replace(/\s*\n\s*/g, " "));
 }
 
 const defaultRun: RunCommand = (bin, args) =>
@@ -119,14 +133,18 @@ export function createCliAdminClient(opts: {
           `Shopify CLI not found. Install it (e.g. \`pnpm add -D @shopify/cli\`) or remove \`auth: "cli"\` from the config.`,
         );
       }
-      throw new SyncTransportError(`Failed to run shopify store execute for ${opts.shop}`, cause);
+      // Plain Errors throughout the local-failure paths: the CLI flattens
+      // SyncTransportError to a generic "Shopify rejected a request", which
+      // would mislabel a local failure and hide the guidance.
+      throw new Error(
+        `Failed to run shopify store execute for ${opts.shop}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
     }
     if (result.code === 0) {
       const parsed = extractJsonObject(result.stdout);
       if (parsed === undefined) {
-        throw new SyncTransportError(
-          "shopify store execute returned unparseable output",
-          result.stdout,
+        throw new Error(
+          `shopify store execute returned unparseable output for ${opts.shop}:\n${stripAnsi(result.stdout).trim().slice(0, 500)}`,
         );
       }
       // Success output is the data object unwrapped (no {"data":…} envelope).
@@ -139,16 +157,16 @@ export function createCliAdminClient(opts: {
       // fetchScopeHandles' silent degrade behave identically under CLI auth.
       return { errors: (parsed as { errors: unknown }).errors };
     }
-    const cleaned = clean(combined);
+    const cleaned = stripBox(combined);
     if (NO_SESSION_EXACT.test(cleaned) || NO_SESSION_FALLBACK.test(cleaned)) {
       throw new Error(
         `No Shopify CLI session for ${opts.shop}. Run: ${authHint}\n` +
           `If the config declares metafields, append each declared owner resource's read/write scopes (e.g. read_products,write_products).`,
       );
     }
-    throw new SyncTransportError(
-      `shopify store execute failed (exit ${result.code}). If no session is stored, run: ${authHint}`,
-      cleaned.trim().slice(0, 500),
+    throw new Error(
+      `shopify store execute failed (exit ${result.code}). If no session is stored, run: ${authHint}\n` +
+        `Output: ${cleaned.trim().slice(0, 500)}`,
     );
   };
 }

@@ -95,7 +95,40 @@ describe("buildExecuteArgs", () => {
   });
 });
 
+/**
+ * The CLI's error box wraps long lines (seen in the captured no-session output:
+ * `--store` and the shop land on different lines), which puts raw newlines
+ * inside JSON string literals once the box chars are stripped.
+ */
+const WRAPPED_BOXED_ERRORS_STDERR = [
+  "╭─ error ─────────────────────────────────────────────╮",
+  "│                                                     │",
+  "│  {                                                  │",
+  '│    "errors": [                                      │',
+  "│      {                                              │",
+  '│        "message": "Access denied for                │',
+  "│          metaobjectDefinitions field. Required      │",
+  '│          access: not authorized."                   │',
+  "│      }                                              │",
+  "│    ]                                                │",
+  "│  }                                                  │",
+  "│                                                     │",
+  "╰─────────────────────────────────────────────────────╯",
+].join("\n");
+
 describe("extractJsonObject", () => {
+  it("parses a boxed error whose message wraps across lines", () => {
+    const parsed = extractJsonObject(WRAPPED_BOXED_ERRORS_STDERR) as { errors: Array<{ message: string }> };
+    expect(parsed.errors).toHaveLength(1);
+    expect(parsed.errors[0].message).toContain("Access denied for");
+    expect(parsed.errors[0].message).toContain("not authorized");
+  });
+
+  it("preserves box-drawing characters inside clean JSON string values", () => {
+    const out = `{\n  "name": "Section ── divider │ part"\n}\n`;
+    expect(extractJsonObject(out)).toEqual({ name: "Section ── divider │ part" });
+  });
+
   it("parses JSON out of ANSI-noised output", () => {
     expect(extractJsonObject(SUCCESS_STDOUT)).toEqual({ shop: { name: "a24 Dev" } });
   });
@@ -156,7 +189,25 @@ describe("createCliAdminClient", () => {
     expect((err as Error).message).toContain(`shopify store auth --store ${shop} --scopes ${CLI_SESSION_SCOPES}`);
   });
 
-  it("throws SyncTransportError with the store auth hint on unrecognized failure output", async () => {
+  it("routes a wrapped boxed error to { errors }, not a false no-session error", async () => {
+    // "not authorized" matches the no-session fallback regex; the parsed
+    // errors payload must win over it.
+    const client = createCliAdminClient({
+      shop,
+      run: fakeRun({ code: 1, stdout: "", stderr: WRAPPED_BOXED_ERRORS_STDERR }),
+    });
+    const res = await client("query { x }");
+    expect(res).toHaveProperty("errors");
+  });
+
+  it("returns pulled data verbatim when values contain box-drawing characters", async () => {
+    const stdout = `Loading stored store auth ...\n{\n  "name": "Section ── divider"\n}\n`;
+    const client = createCliAdminClient({ shop, run: fakeRun({ code: 0, stdout, stderr: "" }) });
+    const res = await client("query { x }");
+    expect(res).toEqual({ data: { name: "Section ── divider" } });
+  });
+
+  it("throws a plain Error with the store auth hint and an output excerpt on unrecognized failure output", async () => {
     const client = createCliAdminClient({
       shop,
       run: fakeRun({ code: 1, stdout: "", stderr: "some unrelated explosion" }),
@@ -165,16 +216,26 @@ describe("createCliAdminClient", () => {
       () => null,
       (e) => e,
     );
-    expect(err).toBeInstanceOf(SyncTransportError);
+    expect(err).toBeInstanceOf(Error);
+    // Not SyncTransportError: the CLI flattens those to a generic "Shopify
+    // rejected a request", which would hide the actionable guidance.
+    expect(err).not.toBeInstanceOf(SyncTransportError);
     expect((err as Error).message).toContain("shopify store auth");
+    expect((err as Error).message).toContain("some unrelated explosion");
   });
 
-  it("throws SyncTransportError when a zero-exit run prints no parseable JSON", async () => {
+  it("throws a plain Error when a zero-exit run prints no parseable JSON", async () => {
     const client = createCliAdminClient({
       shop,
       run: fakeRun({ code: 0, stdout: "all good, no json though", stderr: "" }),
     });
-    await expect(client("query { x }")).rejects.toBeInstanceOf(SyncTransportError);
+    const err = await client("query { x }").then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(SyncTransportError);
+    expect((err as Error).message).toContain("all good, no json though");
   });
 
   it("throws a plain Error mentioning installation when the shopify binary is missing", async () => {
