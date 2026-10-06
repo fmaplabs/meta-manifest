@@ -13,4 +13,14 @@ describe("parseArgs", () => {
     expect(parseArgs(["push", "--allow-cli-app-scope"])).toMatchObject({ command: "push", allowCliAppScope: true });
     expect(parseArgs(["push"])).toMatchObject({ allowCliAppScope: false });
   });
+
+  it('parses --scope and defaults it to "app"', () => {
+    expect(parseArgs(["pull", "--scope", "merchant"])).toMatchObject({ command: "pull", scope: "merchant" });
+    expect(parseArgs(["pull", "--scope", "all"])).toMatchObject({ command: "pull", scope: "all" });
+    expect(parseArgs(["pull"])).toMatchObject({ scope: "app" });
+  });
+
+  it("rejects an unknown --scope value", () => {
+    expect(() => parseArgs(["pull", "--scope", "everything"])).toThrow(/--scope/);
+  });
 });

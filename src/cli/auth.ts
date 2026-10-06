@@ -21,13 +21,17 @@ export function selectAdminClient(config: Config, deps?: { run?: RunCommand }): 
  * Under `auth: "cli"`, `$app` material resolves to the *Shopify CLI's* app
  * identity, not yours. Returns the explanation to raise (hard error, or a
  * warning under --allow-cli-app-scope) when the command would touch app-scoped
- * material — always for `pull` (pullAll enumerates the CLI app's types, and
- * `--force` could overwrite the schema with an empty one), and for `diff`/`push`
- * only when a schema or metafield set actually resolves to app scope. [plan §3]
+ * material — for `pull` whenever its scope includes app-owned material (pullAll
+ * would enumerate the CLI app's types, and `--force` could overwrite the schema
+ * with an empty one; `--scope merchant` touches no `$app` material and is
+ * exempt), and for `diff`/`push` only when a schema or metafield set actually
+ * resolves to app scope. [plan §3]
  */
 export function cliAuthAppScopeNotice(opts: {
   config: Config;
   command: "pull" | "diff" | "push";
+  /** The pull's --scope; only "merchant" skips the guard. */
+  pullScope?: "app" | "merchant" | "all";
   schemas?: AnySchema[];
   metafieldSets?: AnyMetafieldSet[];
 }): string | null {
@@ -36,6 +40,7 @@ export function cliAuthAppScopeNotice(opts: {
 
   let trigger: string | null = null;
   if (command === "pull") {
+    if (opts.pullScope === "merchant") return null;
     trigger = "pull enumerates app-owned ($app) material";
   } else {
     const appSchema = (opts.schemas ?? []).find((s) => effectiveScope(s, config) === "app");

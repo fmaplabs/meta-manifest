@@ -47,9 +47,14 @@ describe("cliAuthAppScopeNotice", () => {
     expect(cliAuthAppScopeNotice({ config: tokenConfig, command: "push", schemas: [AppSchema], metafieldSets: [AppSet] })).toBeNull();
   });
 
-  it("always triggers for pull under cli auth, naming the override flag", () => {
+  it("triggers for pull under cli auth when the pull touches $app material, naming the override flag", () => {
     const notice = cliAuthAppScopeNotice({ config: { ...cliConfig, scope: "merchant" }, command: "pull" });
     expect(notice).toContain("--allow-cli-app-scope");
+    expect(cliAuthAppScopeNotice({ config: cliConfig, command: "pull", pullScope: "all" })).toContain("--allow-cli-app-scope");
+  });
+
+  it('is null for pull with pullScope "merchant" (no $app material is touched)', () => {
+    expect(cliAuthAppScopeNotice({ config: cliConfig, command: "pull", pullScope: "merchant" })).toBeNull();
   });
 
   it("triggers for diff/push when a schema resolves to app scope by default", () => {

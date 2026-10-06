@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AdminGraphQLClient } from "./client";
 import { CURRENT_APP_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "./client";
-import { pullMetafields } from "./metafield-pull";
+import { discoverMerchantMetafields, pullMetafields } from "./metafield-pull";
 
 type Node = Record<string, unknown>;
 
@@ -205,5 +205,51 @@ describe("pullMetafields", () => {
       smartCollectionCondition: { enabled: false },
       uniqueValues: { enabled: false },
     });
+  });
+});
+
+describe("discoverMerchantMetafields", () => {
+  it("keeps merchant namespaces and drops app-reserved and shopify-standard ones", async () => {
+    const { client } = fakeStore(
+      {
+        PRODUCT: [[
+          node({ namespace: "custom", key: "a" }),
+          node({ namespace: "my_fields", key: "b", id: "gid://shopify/MetafieldDefinition/2" }),
+          node({ namespace: "app--111", key: "c", id: "gid://shopify/MetafieldDefinition/3" }),
+          node({ namespace: "app--222--sub", key: "d", id: "gid://shopify/MetafieldDefinition/4" }),
+          node({ namespace: "shopify", key: "e", id: "gid://shopify/MetafieldDefinition/5" }),
+          node({ namespace: "shopify--discovery--product_search_boost", key: "f", id: "gid://shopify/MetafieldDefinition/6" }),
+        ]],
+      },
+      { scopes: ["read_products"] },
+    );
+    const { definitions } = await discoverMerchantMetafields(client);
+    expect(definitions.map((d) => `${d.namespace}.${d.key}`)).toEqual(["custom.a", "my_fields.b"]);
+    expect(definitions[0].ownerType).toBe("PRODUCT");
+  });
+
+  it("skips owners whose documented read scope is missing, warning instead of failing", async () => {
+    const { client, requests } = fakeStore({ PRODUCT: [[node({ namespace: "custom", key: "a" })]] }, { scopes: ["read_products"] });
+    const { definitions, warnings } = await discoverMerchantMetafields(client);
+    expect(definitions).toHaveLength(1);
+    const queried = new Set(requests.map((r) => r?.ownerType));
+    expect(queried.has("CUSTOMER")).toBe(false);
+    expect(queried.has("ORDER")).toBe(false);
+    expect(warnings.join("\n")).toMatch(/customer.*read_customers/);
+  });
+
+  it("treats a write scope as granting read", async () => {
+    const { client, requests } = fakeStore({}, { scopes: ["write_customers"] });
+    await discoverMerchantMetafields(client);
+    expect(new Set(requests.map((r) => r?.ownerType)).has("CUSTOMER")).toBe(true);
+  });
+
+  it("queries every owner when the token's scopes cannot be read", async () => {
+    const { client, requests } = fakeStore({}, { scopes: "error" });
+    const { warnings } = await discoverMerchantMetafields(client);
+    const queried = new Set(requests.map((r) => r?.ownerType));
+    expect(queried.has("PRODUCT")).toBe(true);
+    expect(queried.has("CUSTOMER")).toBe(true);
+    expect(warnings).toEqual([]);
   });
 });

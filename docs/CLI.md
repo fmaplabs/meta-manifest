@@ -236,7 +236,29 @@ Wrote 3 definitions to ./src/schema.ts.
 
 `pull` **overwrites** the schema file. If one already exists you'll see a warning
 first (`Overwriting existing ./src/schema.ts.`); pass `--force` to suppress it in
-scripts. `pull` reads app-owned (`$app:`) definitions only. The generated schema
+scripts. By default `pull` reads app-owned (`$app:`) definitions only; `--scope`
+widens it:
+
+```bash
+npx mm pull --scope merchant   # merchant-owned definitions only
+npx mm pull --scope all        # app-owned and merchant-owned
+```
+
+Merchant-owned metaobjects codegen with `scope: "merchant"` (bare types); other
+apps' reserved (`app--<id>--…`) definitions are never emitted as merchant ones.
+When the config declares a `metafields` module, `--scope merchant`/`all` also
+**discovers** merchant-owned metafield definitions store-wide — every known owner
+type is enumerated, keeping merchant namespaces (any app's `app--…` reserved
+namespaces and Shopify's `shopify`/`shopify--…` standard namespaces are excluded,
+since `metafieldDefinitionCreate` can't recreate them). Owner types the token
+can't read (see the scope table in §2) are skipped with a warning rather than
+failing the pull, and no declared sets are needed — a bootstrap store works with
+an empty metafields module. Under `all`, declared pairs are re-pulled too and
+merged with discovery (each definition appears once). Because `--scope merchant`
+touches no `$app` material, it is exempt from the `auth: "cli"` app-scope guard —
+it's the natural way to bootstrap from a store with only CLI auth.
+
+The generated schema
 captures each definition's `displayName`, `access`, `capabilities`, and per-field
 `filterable`, so a follow-up `diff` round-trips cleanly. If the store has prettier
 installed, the generated source is formatted with it.

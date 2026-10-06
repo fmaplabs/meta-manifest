@@ -15,10 +15,11 @@ export interface Args {
   allowCliAppScope: boolean;
   force: boolean;
   help: boolean;
+  scope: "app" | "merchant" | "all";
 }
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { allowDestructive: false, allowCliAppScope: false, force: false, help: false };
+  const args: Args = { allowDestructive: false, allowCliAppScope: false, force: false, help: false, scope: "app" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") args.help = true;
@@ -26,7 +27,13 @@ export function parseArgs(argv: string[]): Args {
     else if (a === "--allow-cli-app-scope") args.allowCliAppScope = true;
     else if (a === "--force") args.force = true;
     else if (a === "--config") args.config = argv[++i];
-    else if (!a.startsWith("-") && !args.command) args.command = a;
+    else if (a === "--scope") {
+      const value = argv[++i];
+      if (value !== "app" && value !== "merchant" && value !== "all") {
+        throw new Error(`Invalid --scope "${value ?? ""}" — expected app, merchant, or all.`);
+      }
+      args.scope = value;
+    } else if (!a.startsWith("-") && !args.command) args.command = a;
   }
   return args;
 }
@@ -52,6 +59,11 @@ Options:
   --allow-destructive    Apply destructive changes on push
   --allow-cli-app-scope  Under auth: "cli", downgrade the app-scope error to a warning
   --force                Overwrite schema on pull without warning
+  --scope <value>        What pull enumerates: app (default), merchant, or all.
+                         merchant/all also discover merchant-owned metafield
+                         definitions store-wide (owners the token can't read are
+                         skipped with a warning); merchant skips the cli-auth
+                         app-scope guard since no $app material is touched
   -h, --help             Show this help`;
 
 /** Enforce the CLI-auth app-scope guard: hard error, or a warning under --allow-cli-app-scope. */
@@ -62,7 +74,13 @@ function enforceCliAppScope(notice: string | null, allow: boolean): void {
 }
 
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv);
+  let args: Args;
+  try {
+    args = parseArgs(argv);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
   if (args.help || !args.command) {
     console.log(HELP);
     return args.command ? 0 : args.help ? 0 : 1;
@@ -76,20 +94,26 @@ export async function main(argv: string[]): Promise<number> {
     const config = await loadConfig(args.config);
     const client = selectAdminClient(config);
     if (args.command === "pull") {
-      enforceCliAppScope(cliAuthAppScopeNotice({ config, command: "pull" }), args.allowCliAppScope);
-      // Metafield re-pull needs the locally declared pairs; a missing/invalid
-      // metafields module just means nothing is declared yet — skip with a note.
-      let metafields: { path: string; sets: Awaited<ReturnType<typeof loadMetafields>>; config: typeof config } | undefined;
+      enforceCliAppScope(cliAuthAppScopeNotice({ config, command: "pull", pullScope: args.scope }), args.allowCliAppScope);
+      // The app-scope metafield re-pull needs the locally declared pairs; a
+      // missing/invalid metafields module just means nothing is declared yet.
+      // Merchant discovery needs no declared sets, so under --scope merchant/all
+      // the module is still (re)generated from discovery alone.
+      let metafields: { path: string; sets?: Awaited<ReturnType<typeof loadMetafields>>; config: typeof config } | undefined;
       if (config.metafields) {
         try {
           metafields = { path: config.metafields, sets: await loadMetafields(config.metafields, config), config };
         } catch (e) {
-          console.warn(
-            `Skipping metafields pull — could not load "${config.metafields}": ${e instanceof Error ? e.message : String(e)}`,
-          );
+          const reason = `could not load "${config.metafields}": ${e instanceof Error ? e.message : String(e)}`;
+          if (args.scope === "app") {
+            console.warn(`Skipping metafields pull — ${reason}`);
+          } else {
+            if (args.scope === "all") console.warn(`Pulling discovered merchant metafield definitions only — ${reason}`);
+            metafields = { path: config.metafields, config };
+          }
         }
       }
-      await runPull({ client, schemaPath: config.schema, force: args.force, metafields });
+      await runPull({ client, schemaPath: config.schema, force: args.force, scope: args.scope, metafields });
       return 0;
     }
     const schemas = await loadSchemas(config.schema);

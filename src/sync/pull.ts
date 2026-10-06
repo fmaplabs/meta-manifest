@@ -70,23 +70,26 @@ function toCanonicalType(resolved: string): string | null {
   return m ? `$app:${m[1]}` : null;
 }
 
+/** Which ownership class(es) `pullAll` enumerates. */
+export type PullScope = "app" | "merchant" | "all";
+
 /**
- * Enumerate every metaobject definition in the store. By default returns only
- * app-owned definitions, re-labeled to canonical "$app:<handle>" types so they
- * round-trip through `defineMetaobject`. [design §3]
+ * Enumerate metaobject definitions in the store. By default (`scope: "app"`)
+ * returns only app-owned definitions, re-labeled to canonical "$app:<handle>"
+ * types so they round-trip through `defineMetaobject`. `"merchant"` returns
+ * only bare-typed (merchant-owned) definitions — any `app--…` reserved type is
+ * excluded, so a foreign app's definitions are never emitted as merchant ones.
+ * `"all"` returns both. [design §3]
  */
-export async function pullAll(
-  client: AdminGraphQLClient,
-  opts: { appOwnedOnly?: boolean } = {},
-): Promise<PulledRemote[]> {
-  const appOwnedOnly = opts.appOwnedOnly ?? true;
+export async function pullAll(client: AdminGraphQLClient, opts: { scope?: PullScope } = {}): Promise<PulledRemote[]> {
+  const scope = opts.scope ?? "app";
   const out: PulledRemote[] = [];
   let after: string | null = null;
   do {
     const data: ListResponse = await execute<ListResponse>(client, LIST_DEFINITIONS_QUERY, { after });
     for (const node of data.metaobjectDefinitions.nodes) {
       const canonical = toCanonicalType(node.type);
-      if (appOwnedOnly && !canonical) continue;
+      if (canonical ? scope === "merchant" : scope === "app") continue;
       const type = canonical ?? node.type;
       out.push({ id: node.id, type, definition: toDefinition(type, node) });
     }

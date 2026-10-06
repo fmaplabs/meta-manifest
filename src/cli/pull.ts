@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { AdminGraphQLClient, AnyMetafieldSet, ScopeConfig } from "../index";
+import type { AdminGraphQLClient, AnyMetafieldSet, PulledMetafieldDefinition, PullScope, ScopeConfig } from "../index";
 import {
+  discoverMerchantMetafields,
   generateMetafieldsSource,
   generateSchemaSource,
   metafieldPairs,
@@ -38,10 +39,13 @@ export async function runPull(args: {
   client: AdminGraphQLClient;
   schemaPath: string;
   force?: boolean;
-  /** When set, re-pull the declared `(ownerType, namespace)` pairs and codegen this module. [design §8] */
-  metafields?: { path: string; sets: AnyMetafieldSet[]; config?: ScopeConfig };
+  /** Which ownership class(es) to enumerate; defaults to app-owned only. */
+  scope?: PullScope;
+  /** When set, re-pull the declared `(ownerType, namespace)` pairs (app scope) and/or discover merchant pairs, and codegen this module. [design §8] */
+  metafields?: { path: string; sets?: AnyMetafieldSet[]; config?: ScopeConfig };
 }): Promise<{ written: string; count: number; metafieldCount?: number }> {
-  const remote = await pullAll(args.client); // app-owned only
+  const scope = args.scope ?? "app";
+  const remote = await pullAll(args.client, { scope });
   const typeById = new Map(remote.map((r) => [r.id, r.type]));
   const defs = remote.map((r) => normalizeRemote(r.definition, typeById));
   const source = await maybeFormat(generateSchemaSource(defs));
@@ -54,9 +58,27 @@ export async function runPull(args: {
 
   let metafieldCount: number | undefined;
   if (args.metafields) {
-    // v1-minimal: only the declared pairs are re-pulled — no store-wide discovery.
-    const pairs = metafieldPairs(args.metafields.sets, args.metafields.config);
-    const pulled = await pullMetafields(args.client, pairs);
+    // App scope re-pulls only the declared pairs; merchant scope discovers the
+    // store's merchant-owned pairs; "all" merges the two (discovery wins dupes).
+    const pulled: PulledMetafieldDefinition[] = [];
+    const seen = new Set<string>();
+    const add = (defsIn: PulledMetafieldDefinition[]) => {
+      for (const d of defsIn) {
+        const id = `${d.ownerType}/${d.namespace}/${d.key}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        pulled.push(d);
+      }
+    };
+    if (scope !== "app") {
+      const { definitions, warnings } = await discoverMerchantMetafields(args.client);
+      for (const w of warnings) console.warn(w);
+      add(definitions);
+    }
+    if (scope !== "merchant" && args.metafields.sets?.length) {
+      const pairs = metafieldPairs(args.metafields.sets, args.metafields.config);
+      add(await pullMetafields(args.client, pairs));
+    }
     const normalized = pulled.map((d) => ({ ...d, validations: refValidationsToTypes(d.validations, typeById) }));
     const metafieldsSource = await maybeFormat(generateMetafieldsSource(normalized));
     writeGenerated(

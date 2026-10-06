@@ -56,7 +56,7 @@ export type {
 export { refValidationsToIds, refValidationsToTypes } from "./sync/ref-validations";
 
 export { pull, pullAll } from "./sync/pull";
-export type { PulledRemote } from "./sync/pull";
+export type { PulledRemote, PullScope } from "./sync/pull";
 export { push } from "./sync/push";
 export type { PushOptions, PushResult, PushOpResult } from "./sync/push";
 
@@ -68,7 +68,7 @@ export { diffEntries } from "./sync/entry-diff";
 export type { EntryOp } from "./sync/entry-diff";
 export { pushEntries } from "./sync/entry-push";
 export type { EntryPushResult, EntryPushOpResult } from "./sync/entry-push";
-export { pullMetafields, toCanonicalNamespace } from "./sync/metafield-pull";
+export { discoverMerchantMetafields, pullMetafields, toCanonicalNamespace } from "./sync/metafield-pull";
 export type { MetafieldPair, PulledMetafieldDefinition } from "./sync/metafield-pull";
 export { diffMetafields } from "./sync/metafield-diff";
 export type { MetafieldOp, MetafieldChange } from "./sync/metafield-diff";

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Merchant-owned pull (`--scope`).** `mm pull --scope merchant|all` enumerates
+  merchant-owned metaobject definitions (codegen'd with `scope: "merchant"`) alongside or
+  instead of app-owned ones, and — when a `metafields` module is configured — discovers
+  merchant-owned metafield definitions store-wide across every known owner type. Any app's
+  `app--…` reserved namespaces and Shopify's standard `shopify`/`shopify--…` namespaces are
+  excluded; owner types the token can't read are skipped with a warning instead of failing.
+  `--scope merchant` touches no `$app` material, so it skips the `auth: "cli"` app-scope
+  guard — making pull usable under CLI auth for the first time. Library: `pullAll` takes
+  `{ scope }` (replacing `appOwnedOnly`), and `discoverMerchantMetafields` is exported.
+  See `docs/CLI.md` §4 Path B.
 - **Opt-in Shopify-CLI auth mode.** Set `auth: "cli"` in the config and the CLI runs every
   Admin GraphQL call through the Shopify CLI's stored `shopify store auth` session via
   `shopify store execute` — no custom-app token required (`accessToken` becomes optional and

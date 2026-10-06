@@ -1,5 +1,11 @@
 import type { FieldValidation } from "../fields/base";
-import { APP_NAMESPACE, isAppReservedNamespace, metafieldOwnerKey, type MetafieldOwnerType } from "../metafields";
+import {
+  APP_NAMESPACE,
+  isAppReservedNamespace,
+  METAFIELD_OWNER_TYPES,
+  metafieldOwnerKey,
+  type MetafieldOwnerType,
+} from "../metafields";
 import { ACCESS_SCOPES_QUERY, CURRENT_APP_QUERY, execute, PULL_METAFIELD_DEFINITIONS_QUERY, type AdminGraphQLClient } from "./client";
 import type { MetafieldAccess, MetafieldCapabilities } from "./resolve";
 
@@ -207,4 +213,52 @@ export async function pullMetafields(
   }
   await guardEmptyOwnerPulls(client, emptyOwners);
   return out;
+}
+
+/**
+ * A namespace is merchant-owned when it is not reserved: not any app's
+ * `app--<id>` namespace (or sub-namespace) and not a Shopify-managed standard
+ * namespace (`shopify`, `shopify--…`), which `metafieldDefinitionCreate` cannot
+ * recreate. [design §8]
+ */
+function isMerchantNamespace(namespace: string): boolean {
+  if (/^app--\d+/.test(namespace)) return false;
+  if (namespace === "shopify" || namespace.startsWith("shopify--")) return false;
+  return true;
+}
+
+/**
+ * Store-wide discovery of merchant-owned metafield definitions: one page-walk
+ * per known owner type, keeping only merchant namespaces. Unlike the declared-
+ * pair pull, a missing owner read scope is expected here (discovery covers every
+ * owner, not ones the user chose), so documented owners the token cannot read
+ * are skipped with a warning instead of failing the pull. When the token's
+ * scopes cannot be read, every owner is queried and emptiness is trusted. [design §8]
+ */
+export async function discoverMerchantMetafields(
+  client: AdminGraphQLClient,
+): Promise<{ definitions: PulledMetafieldDefinition[]; warnings: string[] }> {
+  const handles = await fetchScopeHandles(client);
+  const warnings: string[] = [];
+  const ownerTypes = (Object.values(METAFIELD_OWNER_TYPES) as MetafieldOwnerType[]).filter((ownerType) => {
+    const read = READ_SCOPE_BY_OWNER[ownerType];
+    if (handles === undefined || read === undefined) return true;
+    if (handles.has(read) || handles.has(read.replace(/^read_/, "write_"))) return true;
+    warnings.push(`Skipping ${metafieldOwnerKey(ownerType) ?? ownerType} metafield definitions: token lacks ${read}.`);
+    return false;
+  });
+
+  const definitions: PulledMetafieldDefinition[] = [];
+  for (const ownerType of ownerTypes) {
+    let after: string | null = null;
+    do {
+      const data: PullResponse = await execute<PullResponse>(client, PULL_METAFIELD_DEFINITIONS_QUERY, { ownerType, after });
+      for (const node of data.metafieldDefinitions.nodes) {
+        if (!isMerchantNamespace(node.namespace)) continue;
+        definitions.push(normalizeNode(ownerType, node, undefined));
+      }
+      after = data.metafieldDefinitions.pageInfo.hasNextPage ? data.metafieldDefinitions.pageInfo.endCursor : null;
+    } while (after !== null);
+  }
+  return { definitions, warnings };
 }
