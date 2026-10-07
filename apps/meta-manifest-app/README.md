@@ -20,7 +20,7 @@ Install from the **workspace root** (`pnpm install`), then from this directory:
 
 ```bash
 pnpm dev          # shopify app dev — tunnels, env vars, hot reload (runs in workerd)
-pnpm deploy       # shopify app deploy — pushes shopify.app.toml config
+pnpm run deploy   # shopify app deploy — pushes shopify.app.toml config
 pnpm deploy:cf    # react-router build && wrangler deploy — ships the worker
 pnpm build        # react-router build → build/
 pnpm typecheck    # react-router typegen && wrangler types && tsc --noEmit
@@ -31,6 +31,17 @@ pnpm lint
 workerd (the Workers runtime), vite.config.ts mirrors the CLI-injected env
 (including the per-session tunnel URL) into `.dev.vars`, and `predev` applies
 D1 migrations to the local database in `.wrangler/state/v3`.
+
+> **Warning:** `automatically_update_urls_on_dev = true` means every
+> `shopify app dev` session rewrites the app's live URLs to the dev tunnel,
+> breaking the deployed workers.dev install until you run `pnpm run deploy`
+> again. Do that after every dev session — or link a separate dev app config
+> (`shopify app config link`) so dev never touches production URLs.
+
+The script names `setup` and `deploy` collide with pnpm **built-in** commands,
+which shadow package scripts — `pnpm setup` configures pnpm itself and never
+touches this package. Always spell these two as `pnpm run setup` /
+`pnpm run deploy`.
 
 Requires the [Shopify CLI](https://shopify.dev/docs/apps/tools/cli) and Node >= 22.12.
 App configuration (scopes — currently `write_products`, `write_metaobjects`,
@@ -72,11 +83,14 @@ in D1's `d1_migrations` table) — `prisma/migrations` is gone, but
 Deploying:
 
 ```bash
+pnpm run setup                               # wrangler d1 migrations apply meta-manifest-db --remote
 pnpm deploy:cf                               # react-router build && wrangler deploy
-pnpm setup                                   # wrangler d1 migrations apply meta-manifest-db --remote
 npx wrangler secret put SHOPIFY_API_SECRET   # once; value from `shopify app env show`
-pnpm deploy                                  # pushes shopify.app.toml (URLs, webhooks) to Shopify
+pnpm run deploy                              # pushes shopify.app.toml (URLs, webhooks) to Shopify
 ```
+
+(Migrations go out before the worker so new code never runs against the old
+schema. `pnpm run`, not bare `pnpm` — see the warning above.)
 
 Non-secret config (`SHOPIFY_API_KEY`, `SHOPIFY_APP_URL`, `SCOPES`) lives in
 `wrangler.jsonc` `vars`; `SHOPIFY_API_SECRET` is a wrangler secret only.

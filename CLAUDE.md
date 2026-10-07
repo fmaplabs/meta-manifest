@@ -26,7 +26,7 @@ pnpm typecheck    # turbo run typecheck
 pnpm lint         # turbo run lint   (currently only the app has a lint script)
 ```
 
-App development (from `apps/meta-manifest-app`): `pnpm dev` (shopify app dev), `pnpm deploy`.
+App development (from `apps/meta-manifest-app`): `pnpm dev` (shopify app dev), `pnpm run deploy` (shopify app deploy), `pnpm deploy:cf` (ship the worker). `setup` and `deploy` collide with pnpm built-ins — always `pnpm run` them. After a `shopify app dev` session, re-run `pnpm run deploy`: dev rewrites the app's live URLs to the tunnel.
 
 Per package (from `packages/core` or `packages/cli`):
 
