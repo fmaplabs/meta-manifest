@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseArgs } from "./index";
+import { checkExitCode, parseArgs } from "./index";
 
 describe("parseArgs", () => {
   it("parses command and flags", () => {
@@ -41,5 +41,28 @@ describe("parseArgs", () => {
   it("rejects unknown flags instead of silently ignoring them", () => {
     expect(() => parseArgs(["pull", "--scpoe=merchant"])).toThrow(/--scpoe/);
     expect(() => parseArgs(["pull", "--unknown"])).toThrow(/--unknown/);
+  });
+
+  it("parses --check and defaults it to false", () => {
+    expect(parseArgs(["diff", "--check"])).toMatchObject({ command: "diff", check: true });
+    expect(parseArgs(["diff"])).toMatchObject({ check: false });
+  });
+
+  it("rejects a value attached to --check", () => {
+    expect(() => parseArgs(["diff", "--check=x"])).toThrow(/--check/);
+  });
+});
+
+describe("checkExitCode", () => {
+  const op = {} as never;
+
+  it("returns 0 when every op list is empty", () => {
+    expect(checkExitCode({ definitions: [], metafields: [], entries: [] })).toBe(0);
+  });
+
+  it("returns 2 on drift in any of the three lists", () => {
+    expect(checkExitCode({ definitions: [op], metafields: [], entries: [] })).toBe(2);
+    expect(checkExitCode({ definitions: [], metafields: [op], entries: [] })).toBe(2);
+    expect(checkExitCode({ definitions: [], metafields: [], entries: [op] })).toBe(2);
   });
 });

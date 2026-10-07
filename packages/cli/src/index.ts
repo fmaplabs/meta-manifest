@@ -14,12 +14,13 @@ export interface Args {
   allowDestructive: boolean;
   allowCliAppScope: boolean;
   force: boolean;
+  check: boolean;
   help: boolean;
   scope: "app" | "merchant" | "all";
 }
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { allowDestructive: false, allowCliAppScope: false, force: false, help: false, scope: "app" };
+  const args: Args = { allowDestructive: false, allowCliAppScope: false, force: false, check: false, help: false, scope: "app" };
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i];
     // Split "--flag=value" so both spellings parse identically.
@@ -34,6 +35,7 @@ export function parseArgs(argv: string[]): Args {
     else if (a === "--allow-destructive") args.allowDestructive = booleanFlag();
     else if (a === "--allow-cli-app-scope") args.allowCliAppScope = booleanFlag();
     else if (a === "--force") args.force = booleanFlag();
+    else if (a === "--check") args.check = booleanFlag();
     else if (a === "--config") args.config = inline ?? argv[++i];
     else if (a === "--scope") {
       const value = inline ?? argv[++i];
@@ -67,6 +69,8 @@ Options:
   --config <path>        Config file (default: meta-manifest.config.ts)
   --allow-destructive    Apply destructive changes on push
   --allow-cli-app-scope  Under auth: "cli", downgrade the app-scope error to a warning
+  --check                On diff, exit 2 when the store differs from the local
+                         schema (for CI drift gates); exit 0 when in sync
   --force                Overwrite schema on pull without warning
   --scope <value>        What pull enumerates: app (default), merchant, or all.
                          merchant/all also discover merchant-owned metafield
@@ -74,6 +78,11 @@ Options:
                          skipped with a warning); merchant skips the cli-auth
                          app-scope guard since no $app material is touched
   -h, --help             Show this help`;
+
+/** Under diff --check: exit 2 when the store differs from the desired state, 0 when in sync. */
+export function checkExitCode(result: { definitions: unknown[]; metafields: unknown[]; entries: unknown[] }): 0 | 2 {
+  return result.definitions.length || result.metafields.length || result.entries.length ? 2 : 0;
+}
 
 /** Enforce the CLI-auth app-scope guard: hard error, or a warning under --allow-cli-app-scope. */
 function enforceCliAppScope(notice: string | null, allow: boolean): void {
@@ -135,8 +144,8 @@ export async function main(argv: string[]): Promise<number> {
       );
     }
     if (args.command === "diff") {
-      await runDiff({ client, schemas, entries, metafields, config });
-      return 0;
+      const result = await runDiff({ client, schemas, entries, metafields, config });
+      return args.check ? checkExitCode(result) : 0;
     }
     if (args.command === "push") {
       const result = await runPush({ client, schemas, entries, metafields, config, allowDestructive: args.allowDestructive });
