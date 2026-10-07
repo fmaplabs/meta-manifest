@@ -12,13 +12,13 @@
     "deploy:cf": "react-router build && wrangler deploy",
     "setup": "wrangler d1 migrations apply meta-manifest-db --remote",
     "postinstall": "prisma generate",
-    "typegen": "wrangler types",
+    "typegen": "wrangler types --strict-vars=false",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "typecheck": "react-router typegen && wrangler types && tsc --noEmit"
+    "typecheck": "react-router typegen && wrangler types --strict-vars=false && tsc --noEmit"
   },
   "type": "module",
   "engines": {

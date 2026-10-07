@@ -3,5 +3,7 @@ roles = ["frontend", "backend"]
 webhooks_path = "/webhooks/app/uninstalled"
 
 [commands]
-predev = "npx prisma generate"
-dev = "npx prisma migrate deploy && npm exec react-router dev"
+# Local D1 state lives in .wrangler/state/v3, shared by the wrangler CLI
+# and the Cloudflare vite plugin's miniflare.
+predev = "npx prisma generate && npx wrangler d1 migrations apply meta-manifest-db --local"
+dev = "npm exec react-router dev"

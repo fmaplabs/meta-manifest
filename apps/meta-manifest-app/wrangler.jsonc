@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "meta-manifest-app",
+  "account_id": "9497c85188ba3fea0471b96b708dcfb8",
+  "main": "./workers/app.ts",
+  // nodejs_compat with a date >= 2025-04-01 populates process.env from vars,
+  // which @shopify/shopify-app-react-router reads for its defaults.
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meta-manifest-db",
+      "database_id": "25400c22-24ce-4fe7-8344-894fc777ebb6",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  // Non-secret config. SHOPIFY_API_SECRET is a wrangler secret only:
+  //   npx wrangler secret put SHOPIFY_API_SECRET
+  "vars": {
+    "SHOPIFY_API_KEY": "2d69a1c61711516c3d9403b4e1cad2db",
+    "SHOPIFY_APP_URL": "https://meta-manifest-app.example.workers.dev",
+    "SCOPES": "write_products,write_metaobjects,write_metaobject_definitions"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // No "assets" key: @cloudflare/vite-plugin emits the client-build assets
+  // config into .wrangler/deploy/config.json at build time.
+}

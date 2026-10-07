@@ -1,3 +1,8 @@
+import { writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig, type UserConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
@@ -14,6 +19,38 @@ if (
   process.env.SHOPIFY_APP_URL = process.env.HOST;
   delete process.env.HOST;
 }
+
+// The worker runs in workerd, which only sees wrangler vars and .dev.vars —
+// not this process's env. When the Shopify CLI is driving dev (it injects
+// SHOPIFY_API_KEY), mirror its values (incl. the per-session tunnel URL)
+// into .dev.vars so the workerd runtime gets them.
+if (process.env.SHOPIFY_API_KEY) {
+  const devVars = [
+    "SHOPIFY_API_KEY",
+    "SHOPIFY_API_SECRET",
+    "SHOPIFY_APP_URL",
+    "SCOPES",
+    "SHOP_CUSTOM_DOMAIN",
+  ]
+    .filter((key) => process.env[key])
+    .map((key) => `${key}=${JSON.stringify(process.env[key])}`)
+    .join("\n");
+  writeFileSync(
+    fileURLToPath(new URL(".dev.vars", import.meta.url)),
+    `${devVars}\n`,
+  );
+}
+
+// Vite can't resolve the bare specifier ".prisma/client/default" (a
+// dot-prefixed package only Node's CJS resolver handles) and would
+// externalize it, breaking the worker bundle. Point it at the generated
+// client's wasm entry — the build only ever targets workerd. Resolving via
+// @prisma/client's realpath keeps the pnpm store hash out of the config.
+const require = createRequire(import.meta.url);
+const generatedClientDir = path.join(
+  path.dirname(require.resolve("@prisma/client/package.json")),
+  "../../.prisma/client",
+);
 
 const host = new URL(process.env.SHOPIFY_APP_URL || "http://localhost")
   .hostname;
@@ -36,6 +73,11 @@ if (host === "localhost") {
 }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      ".prisma/client/default": path.join(generatedClientDir, "wasm.js"),
+    },
+  },
   server: {
     allowedHosts: [host],
     cors: {
@@ -49,6 +91,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
     reactRouter(),
     tsconfigPaths(),
   ],

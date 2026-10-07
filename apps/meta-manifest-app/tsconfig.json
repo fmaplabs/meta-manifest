@@ -1,5 +1,12 @@
 {
-  "include": ["env.d.ts", "**/*.ts", "**/*.tsx", ".react-router/types/**/*"],
+  "include": [
+    "env.d.ts",
+    "worker-configuration.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".react-router/types/**/*",
+    "workers/**/*.ts"
+  ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "strict": true,
@@ -16,7 +23,7 @@
     "moduleResolution": "Bundler",
     "target": "ES2022",
     "baseUrl": ".",
-    "types": ["@react-router/node", "vite/client", "@shopify/polaris-types"],
+    "types": ["vite/client", "@shopify/polaris-types"],
     "rootDirs": [".", "./.react-router/types"]
   }
 }
