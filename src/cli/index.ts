@@ -21,19 +21,28 @@ export interface Args {
 export function parseArgs(argv: string[]): Args {
   const args: Args = { allowDestructive: false, allowCliAppScope: false, force: false, help: false, scope: "app" };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--help" || a === "-h") args.help = true;
-    else if (a === "--allow-destructive") args.allowDestructive = true;
-    else if (a === "--allow-cli-app-scope") args.allowCliAppScope = true;
-    else if (a === "--force") args.force = true;
-    else if (a === "--config") args.config = argv[++i];
+    const raw = argv[i];
+    // Split "--flag=value" so both spellings parse identically.
+    const eq = raw.startsWith("--") ? raw.indexOf("=") : -1;
+    const a = eq === -1 ? raw : raw.slice(0, eq);
+    const inline = eq === -1 ? undefined : raw.slice(eq + 1);
+    const booleanFlag = (): true => {
+      if (inline !== undefined) throw new Error(`Flag ${a} does not take a value (got "${raw}").`);
+      return true;
+    };
+    if (a === "--help" || a === "-h") args.help = booleanFlag();
+    else if (a === "--allow-destructive") args.allowDestructive = booleanFlag();
+    else if (a === "--allow-cli-app-scope") args.allowCliAppScope = booleanFlag();
+    else if (a === "--force") args.force = booleanFlag();
+    else if (a === "--config") args.config = inline ?? argv[++i];
     else if (a === "--scope") {
-      const value = argv[++i];
+      const value = inline ?? argv[++i];
       if (value !== "app" && value !== "merchant" && value !== "all") {
         throw new Error(`Invalid --scope "${value ?? ""}" — expected app, merchant, or all.`);
       }
       args.scope = value;
-    } else if (!a.startsWith("-") && !args.command) args.command = a;
+    } else if (a.startsWith("-")) throw new Error(`Unknown flag "${raw}". Run mm --help for usage.`);
+    else if (!args.command) args.command = a;
   }
   return args;
 }

@@ -23,4 +23,23 @@ describe("parseArgs", () => {
   it("rejects an unknown --scope value", () => {
     expect(() => parseArgs(["pull", "--scope", "everything"])).toThrow(/--scope/);
   });
+
+  it("parses --flag=value forms", () => {
+    expect(parseArgs(["pull", "--scope=merchant"])).toMatchObject({ command: "pull", scope: "merchant" });
+    expect(parseArgs(["diff", "--config=custom.ts"])).toMatchObject({ command: "diff", config: "custom.ts" });
+  });
+
+  it("rejects an unknown --scope value in equals form", () => {
+    expect(() => parseArgs(["pull", "--scope=everything"])).toThrow(/--scope/);
+    expect(() => parseArgs(["pull", "--scope="])).toThrow(/--scope/);
+  });
+
+  it("rejects a value attached to a boolean flag", () => {
+    expect(() => parseArgs(["pull", "--force=true"])).toThrow(/--force/);
+  });
+
+  it("rejects unknown flags instead of silently ignoring them", () => {
+    expect(() => parseArgs(["pull", "--scpoe=merchant"])).toThrow(/--scpoe/);
+    expect(() => parseArgs(["pull", "--unknown"])).toThrow(/--unknown/);
+  });
 });

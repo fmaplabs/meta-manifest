@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Strict flag parsing (`--flag=value`, unknown flags).** The CLI now accepts the
+  `--flag=value` spelling for value-taking flags (`--scope=merchant`, `--config=custom.ts`)
+  in addition to the space-separated form, rejects a value attached to a boolean flag
+  (`--force=true` errors), and errors on any unrecognized flag instead of silently ignoring
+  it. Previously `--scope=merchant` was dropped on the floor and pull ran under the default
+  `app` scope, writing 0 definitions with no hint why. Slightly breaking: stray or
+  misspelled flags that used to be ignored now fail the command — that silence is what hid
+  the bug.
 - **Merchant-owned pull (`--scope`).** `mm pull --scope merchant|all` enumerates
   merchant-owned metaobject definitions (codegen'd with `scope: "merchant"`) alongside or
   instead of app-owned ones, and — when a `metafields` module is configured — discovers
