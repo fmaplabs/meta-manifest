@@ -19,7 +19,7 @@
   //   npx wrangler secret put SHOPIFY_API_SECRET
   "vars": {
     "SHOPIFY_API_KEY": "2d69a1c61711516c3d9403b4e1cad2db",
-    "SHOPIFY_APP_URL": "https://meta-manifest-app.example.workers.dev",
+    "SHOPIFY_APP_URL": "https://meta-manifest-app.fmaplabs.workers.dev",
     "SCOPES": "write_products,write_metaobjects,write_metaobject_definitions"
   },
   "observability": {

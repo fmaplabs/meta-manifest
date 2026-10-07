@@ -2,7 +2,7 @@
 
 client_id = "2d69a1c61711516c3d9403b4e1cad2db"
 name = "meta-manifest-app"
-application_url = "https://example.com"
+application_url = "https://meta-manifest-app.fmaplabs.workers.dev"
 embedded = true
 
 [access_scopes]
@@ -34,7 +34,7 @@ name = "Description"
 type = "multi_line_text_field"
 
 [webhooks]
-api_version = "2027-01"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
@@ -45,7 +45,7 @@ api_version = "2027-01"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://meta-manifest-app.fmaplabs.workers.dev/auth/callback" ]
 
 [build]
 include_config_on_deploy = true
