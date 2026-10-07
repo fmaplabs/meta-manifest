@@ -1,10 +1,7 @@
-import { PassThrough } from "stream";
-import { renderToPipeableStream } from "react-dom/server";
+import { renderToReadableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
-import { createReadableStreamFromReadable } from "@react-router/node";
-import { type EntryContext } from "react-router";
+import type { AppLoadContext, EntryContext } from "react-router";
 import { isbot } from "isbot";
-import { addDocumentResponseHeaders } from "./shopify.server";
 
 export const streamTimeout = 5000;
 
@@ -12,46 +9,47 @@ export default async function handleRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
-  reactRouterContext: EntryContext
+  reactRouterContext: EntryContext,
+  loadContext: AppLoadContext,
 ) {
-  addDocumentResponseHeaders(request, responseHeaders);
-  const userAgent = request.headers.get("user-agent");
-  const callbackName = isbot(userAgent ?? '')
-    ? "onAllReady"
-    : "onShellReady";
+  loadContext.shopify.addDocumentResponseHeaders(request, responseHeaders);
 
-  return new Promise((resolve, reject) => {
-    const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter
-        context={reactRouterContext}
-        url={request.url}
-      />,
-      {
-        [callbackName]: () => {
-          const body = new PassThrough();
-          const stream = createReadableStreamFromReadable(body);
+  let shellRendered = false;
 
-          responseHeaders.set("Content-Type", "text/html");
-          resolve(
-            new Response(stream, {
-              headers: responseHeaders,
-              status: responseStatusCode,
-            })
-          );
-          pipe(body);
-        },
-        onShellError(error) {
-          reject(error);
-        },
-        onError(error) {
-          responseStatusCode = 500;
+  // Abort the React renderer once loaders have had their streamTimeout,
+  // so rejected boundary contents still flush before the stream closes.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    streamTimeout + 1000,
+  );
+
+  const body = await renderToReadableStream(
+    <ServerRouter context={reactRouterContext} url={request.url} />,
+    {
+      signal: controller.signal,
+      onError(error: unknown) {
+        responseStatusCode = 500;
+        // Errors thrown during initial shell rendering are reported by the
+        // awaited renderToReadableStream rejecting; only log the rest.
+        if (shellRendered) {
           console.error(error);
-        },
-      }
-    );
+        }
+      },
+    },
+  );
+  shellRendered = true;
 
-    // Automatically timeout the React renderer after 6 seconds, which ensures
-    // React has enough time to flush down the rejected boundary contents
-    setTimeout(abort, streamTimeout + 1000);
+  const userAgent = request.headers.get("user-agent");
+  if (userAgent && isbot(userAgent)) {
+    await body.allReady;
+  }
+
+  body.allReady.then(() => clearTimeout(timeoutId)).catch(() => {});
+
+  responseHeaders.set("Content-Type", "text/html");
+  return new Response(body, {
+    headers: responseHeaders,
+    status: responseStatusCode,
   });
 }
