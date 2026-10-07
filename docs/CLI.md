@@ -486,8 +486,9 @@ intentional and reviewed.
 `meta-manifest.config.ts` (or the `--config` file). Because the config reads the token via
 `process.env.SHOPIFY_ADMIN_TOKEN!`, **an unset token surfaces here as `accessToken`** — export it or add it to `.env` (step 2). |
 | `Schema module "…" must export a schemas array.` | `src/schema.ts` doesn't `export const schemas = [...]`. Add it. |
-| `Sync failed: Shopify rejected a request.` (exit 1) | The request reached Shopify and was refused — a bad or expired
-token (present but rejected), a wrong `shop`, or missing scopes. |
+| `Sync failed: …` (exit 1) | The request reached Shopify and was refused — a bad or expired token (present but
+rejected), a wrong `shop`, or missing scopes. The line names the failing request and prints Shopify's response body
+when there is one — e.g. `shop_not_permitted` under `auth: "client-credentials"` means the app isn't installed on that shop. |
 | `push` exits `2` with `⚠ blocked` lines | Ops couldn't run — an unmet dependency (e.g. a referenced type whose create
 failed). See [`SYNC.md` §5](./SYNC.md#5-push). |
 | `push` exits `2` with `✗ failed` lines | Shopify returned `userErrors` for that op (e.g. an invalid validation). The message is in the line. |

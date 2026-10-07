@@ -71,6 +71,15 @@ describe("runInit", () => {
     expect(contents.split("\n")).toContain(".env");
   });
 
+  it("appends .env on its own line when .gitignore lacks a trailing newline", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+    writeFileSync(join(cwd, ".gitignore"), "node_modules\ndist");
+    await runInit({ cwd, env: {} });
+    const lines = readFileSync(join(cwd, ".gitignore"), "utf8").split("\n");
+    expect(lines).toContain("dist");
+    expect(lines).toContain(".env");
+  });
+
   it("leaves .gitignore alone when .env is already covered", async () => {
     for (const covered of [".env\n", "/.env\n"]) {
       const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));

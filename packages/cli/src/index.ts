@@ -54,7 +54,8 @@ const HELP = `meta-manifest — sync Shopify metaobject & metafield definitions
 Usage: mm <command> [options]
 
 Commands:
-  init                 Scaffold meta-manifest.config.ts + src/schema.ts
+  init                 Scaffold meta-manifest.config.ts + src/schema.ts + .env
+                       (and make sure .gitignore covers .env)
   pull                 Enumerate remote definitions and write schema source
   diff                 Show the changes a push would apply
   push                 Apply local schema to the store
@@ -78,6 +79,16 @@ Options:
                          skipped with a warning); merchant skips the cli-auth
                          app-scope guard since no $app material is touched
   -h, --help             Show this help`;
+
+/**
+ * One printable line (plus the response payload, when Shopify sent one) for a
+ * transport failure — e.g. a client-credentials mint rejected with
+ * shop_not_permitted must be distinguishable from a network error.
+ */
+export function describeTransportError(err: SyncTransportError): string {
+  const detail = err.errors == null ? "" : `\n${typeof err.errors === "string" ? err.errors : JSON.stringify(err.errors)}`;
+  return `Sync failed: ${err.message}.${detail}`;
+}
 
 /** Under diff --check: exit 2 when the store differs from the desired state, 0 when in sync. */
 export function checkExitCode(result: { definitions: unknown[]; metafields: unknown[]; entries: unknown[] }): 0 | 2 {
@@ -155,7 +166,7 @@ export async function main(argv: string[]): Promise<number> {
     console.log(HELP);
     return 1;
   } catch (err) {
-    if (err instanceof SyncTransportError) console.error(`Sync failed: Shopify rejected a request.`);
+    if (err instanceof SyncTransportError) console.error(describeTransportError(err));
     else console.error(err instanceof Error ? err.message : String(err));
     return 1;
   }

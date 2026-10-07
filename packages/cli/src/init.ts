@@ -69,9 +69,10 @@ export async function runInit(
     writeFileSync(gitignore, ".env\n");
     created.push(".gitignore");
   } else {
-    const lines = readFileSync(gitignore, "utf8").split("\n");
-    if (!lines.some((l) => l.trim() === ".env" || l.trim() === "/.env")) {
-      appendFileSync(gitignore, ".env\n");
+    const contents = readFileSync(gitignore, "utf8");
+    if (!contents.split("\n").some((l) => l.trim() === ".env" || l.trim() === "/.env")) {
+      // A file without a trailing newline would otherwise glue ".env" onto its last rule.
+      appendFileSync(gitignore, contents === "" || contents.endsWith("\n") ? ".env\n" : "\n.env\n");
       console.log("Added .env to .gitignore.");
     }
   }
