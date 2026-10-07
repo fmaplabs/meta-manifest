@@ -1,10 +1,10 @@
-import type { Config } from "../config";
-import type { AdminGraphQLClient } from "../sync/client";
-import type { MetaobjectSchema } from "../define";
-import { createAdminClient } from "../node/client";
-import { createCliAdminClient, type RunCommand } from "../node/cli-client";
-import { effectiveNamespace, effectiveScope } from "../sync/resolve";
-import { isAppReservedNamespace, type AnyMetafieldSet } from "../metafields";
+import type { Config } from "@fmaplabs/meta-manifest";
+import type { AdminGraphQLClient } from "@fmaplabs/meta-manifest";
+import type { MetaobjectSchema } from "@fmaplabs/meta-manifest";
+import { createAdminClient } from "@fmaplabs/meta-manifest/node";
+import { createCliAdminClient, type RunCommand } from "@fmaplabs/meta-manifest/node";
+import { effectiveNamespace, effectiveScope } from "@fmaplabs/meta-manifest";
+import { isAppReservedNamespace, type AnyMetafieldSet } from "@fmaplabs/meta-manifest";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySchema = MetaobjectSchema<any>;

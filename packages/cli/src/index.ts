@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { SyncTransportError } from "../sync/client";
+import { SyncTransportError } from "@fmaplabs/meta-manifest";
 import { selectAdminClient, cliAuthAppScopeNotice } from "./auth";
 import { loadConfig, loadEntries, loadMetafields, loadSchemas } from "./load-config";
 import { loadDotEnv } from "./load-env";

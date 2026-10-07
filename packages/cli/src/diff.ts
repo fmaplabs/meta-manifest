@@ -1,5 +1,5 @@
-import type { AdminGraphQLClient, AnyEntries, AnyMetafieldSet, DiffOp, EntryOp, MetafieldOp, ScopeConfig } from "../index";
-import type { AnySchema } from "../index";
+import type { AdminGraphQLClient, AnyEntries, AnyMetafieldSet, DiffOp, EntryOp, MetafieldOp, ScopeConfig } from "@fmaplabs/meta-manifest";
+import type { AnySchema } from "@fmaplabs/meta-manifest";
 import { planEntriesFor, planFor, planMetafieldsFor } from "./plan";
 import { describeEntryOp, describeIssues, describeMetafieldOp, describeOp } from "./format";
 

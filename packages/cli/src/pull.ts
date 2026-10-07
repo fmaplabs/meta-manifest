@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { AdminGraphQLClient, AnyMetafieldSet, PulledMetafieldDefinition, PullScope, ScopeConfig } from "../index";
+import type { AdminGraphQLClient, AnyMetafieldSet, PulledMetafieldDefinition, PullScope, ScopeConfig } from "@fmaplabs/meta-manifest";
 import {
   discoverMerchantMetafields,
   generateMetafieldsSource,
@@ -10,7 +10,7 @@ import {
   pullAll,
   pullMetafields,
   refValidationsToTypes,
-} from "../index";
+} from "@fmaplabs/meta-manifest";
 
 /** Format source with the user's local prettier if available; otherwise return as-is. */
 async function maybeFormat(source: string): Promise<string> {

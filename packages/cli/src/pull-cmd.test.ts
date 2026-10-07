@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { AdminGraphQLClient } from "../index";
-import { defineMetafields, m } from "../index";
-import { CURRENT_APP_QUERY, LIST_DEFINITIONS_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
+import type { AdminGraphQLClient } from "@fmaplabs/meta-manifest";
+import { defineMetafields, m } from "@fmaplabs/meta-manifest";
+import { CURRENT_APP_QUERY, LIST_DEFINITIONS_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "@fmaplabs/meta-manifest";
 import { runPull } from "./pull";
 
 function fakeStore(): AdminGraphQLClient {

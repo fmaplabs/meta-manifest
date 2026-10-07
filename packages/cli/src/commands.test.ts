@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { AdminGraphQLClient } from "../index";
+import type { AdminGraphQLClient } from "@fmaplabs/meta-manifest";
 import {
   CREATE_DEFINITION_MUTATION,
   CREATE_METAFIELD_DEFINITION_MUTATION,
@@ -9,8 +9,8 @@ import {
   PULL_ENTRY_QUERY,
   PULL_METAFIELD_DEFINITIONS_QUERY,
   UPSERT_ENTRY_MUTATION,
-} from "../sync/client";
-import { defineEntries, defineMetafields, defineMetaobject, m } from "../index";
+} from "@fmaplabs/meta-manifest";
+import { defineEntries, defineMetafields, defineMetaobject, m } from "@fmaplabs/meta-manifest";
 import { runDiff } from "./diff";
 import { runPush } from "./push";
 

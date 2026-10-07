@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import type { AdminGraphQLClient } from "../index";
-import { CURRENT_APP_QUERY, PULL_DEFINITION_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "../sync/client";
-import { defineMetafields, defineMetaobject, m } from "../index";
+import type { AdminGraphQLClient } from "@fmaplabs/meta-manifest";
+import { CURRENT_APP_QUERY, PULL_DEFINITION_QUERY, PULL_METAFIELD_DEFINITIONS_QUERY } from "@fmaplabs/meta-manifest";
+import { defineMetafields, defineMetaobject, m } from "@fmaplabs/meta-manifest";
 import { planFor, planMetafieldsFor } from "./plan";
 
 const A = defineMetaobject("a", { name: "A", fields: { n: m.text({ required: true }) } });

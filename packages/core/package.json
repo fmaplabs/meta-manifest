@@ -1,0 +1,63 @@
+{
+  "name": "@fmaplabs/meta-manifest",
+  "version": "0.9.9",
+  "description": "Zero-dependency, zod-style builder for Shopify metaobject & metafield definitions, with pull → diff → push sync primitives.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.19 <22 || >=22.12"
+  },
+  "author": "kyle",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fmaplabs/meta-manifest.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/fmaplabs/meta-manifest#readme",
+  "bugs": "https://github.com/fmaplabs/meta-manifest/issues",
+  "keywords": [
+    "shopify",
+    "metaobject",
+    "metaobjects",
+    "metafields",
+    "schema",
+    "codegen",
+    "admin-api"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./node": {
+      "types": "./dist/node/client.d.ts",
+      "import": "./dist/node/client.js",
+      "require": "./dist/node/client.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "release": "pnpm test && pnpm typecheck && npm publish --access public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "jiti": "^2.7.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  }
+}

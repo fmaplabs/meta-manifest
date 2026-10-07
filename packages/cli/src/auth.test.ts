@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { selectAdminClient, cliAuthAppScopeNotice } from "./auth";
-import { defineMetaobject } from "../define";
-import { defineMetafields } from "../metafields";
-import { m } from "../fields/index";
-import type { Config } from "../config";
-import type { RunCommand } from "../node/cli-client";
+import { defineMetaobject } from "@fmaplabs/meta-manifest";
+import { defineMetafields } from "@fmaplabs/meta-manifest";
+import { m } from "@fmaplabs/meta-manifest";
+import type { Config } from "@fmaplabs/meta-manifest";
+import type { RunCommand } from "@fmaplabs/meta-manifest/node";
 
 afterEach(() => vi.unstubAllGlobals());
 

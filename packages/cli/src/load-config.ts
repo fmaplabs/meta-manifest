@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
-import { validateConfig } from "../config";
-import type { Config } from "../config";
-import { isMetaobjectSchema } from "../define";
-import { isMetafieldSet } from "../metafields";
-import { effectiveNamespace } from "../sync/resolve";
-import type { AnyEntries, AnyMetafieldSet, AnySchema, ScopeConfig } from "../index";
+import { validateConfig } from "@fmaplabs/meta-manifest";
+import type { Config } from "@fmaplabs/meta-manifest";
+import { isMetaobjectSchema } from "@fmaplabs/meta-manifest";
+import { isMetafieldSet } from "@fmaplabs/meta-manifest";
+import { effectiveNamespace } from "@fmaplabs/meta-manifest";
+import type { AnyEntries, AnyMetafieldSet, AnySchema, ScopeConfig } from "@fmaplabs/meta-manifest";
 
 const jiti = createJiti(import.meta.url);
 

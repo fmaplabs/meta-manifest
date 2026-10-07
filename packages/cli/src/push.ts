@@ -6,9 +6,9 @@ import type {
   MetafieldPushResult,
   PushResult,
   ScopeConfig,
-} from "../index";
-import type { AnySchema } from "../index";
-import { push, pushEntries, pushMetafields, resolveEntries } from "../index";
+} from "@fmaplabs/meta-manifest";
+import type { AnySchema } from "@fmaplabs/meta-manifest";
+import { push, pushEntries, pushMetafields, resolveEntries } from "@fmaplabs/meta-manifest";
 import { planEntriesFor, planFor, planMetafieldsFor } from "./plan";
 import {
   describeEntryResult,

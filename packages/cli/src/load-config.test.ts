@@ -18,7 +18,9 @@ function tmpDir(files: Record<string, string>): string {
   return dir;
 }
 
-const idx = JSON.stringify(join(process.cwd(), "src/index.ts"));
+// Fixtures import the library the way a user's config would; point jiti at the
+// core package's source so the test doesn't depend on a prior core build.
+const idx = JSON.stringify(join(process.cwd(), "../core/src/index.ts"));
 
 describe("loadConfig / loadSchemas", () => {
   it("loads and validates a config default export", async () => {

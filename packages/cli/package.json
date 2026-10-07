@@ -1,0 +1,55 @@
+{
+  "name": "@fmaplabs/meta-manifest-cli",
+  "version": "0.9.9",
+  "description": "CLI (mm) for @fmaplabs/meta-manifest: syncs Shopify metaobject & metafield definitions to a store via pull → diff → push.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.19 <22 || >=22.12"
+  },
+  "author": "kyle",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fmaplabs/meta-manifest.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/fmaplabs/meta-manifest#readme",
+  "bugs": "https://github.com/fmaplabs/meta-manifest/issues",
+  "keywords": [
+    "shopify",
+    "metaobject",
+    "metaobjects",
+    "metafields",
+    "cli",
+    "codegen",
+    "admin-api"
+  ],
+  "bin": {
+    "meta-manifest": "./dist/index.js",
+    "mm": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "release": "pnpm test && pnpm typecheck && npm publish --access public"
+  },
+  "dependencies": {
+    "@fmaplabs/meta-manifest": "workspace:^",
+    "jiti": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  }
+}

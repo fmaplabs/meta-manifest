@@ -17,7 +17,7 @@ client **you inject** — the package itself has zero runtime dependencies and n
 knowledge of how you talk to Shopify.
 
 A runnable version of everything below (define → pull → diff → push, against a
-fake in-memory store) is [`../src/sync/sync.e2e.test.ts`](../src/sync/sync.e2e.test.ts):
+fake in-memory store) is [`../packages/core/src/sync/sync.e2e.test.ts`](../packages/core/src/sync/sync.e2e.test.ts):
 
 ```bash
 pnpm test
@@ -463,19 +463,19 @@ directly by the test suite:
 pnpm test
 ```
 
-[`../src/sync/sync.e2e.test.ts`](../src/sync/sync.e2e.test.ts) runs define →
+[`../packages/core/src/sync/sync.e2e.test.ts`](../packages/core/src/sync/sync.e2e.test.ts) runs define →
 pull → diff → push end-to-end against a fake, in-file `AdminGraphQLClient` (an
 empty store, asserting referenced-type-first create ordering).
-[`../src/sync/entries.e2e.test.ts`](../src/sync/entries.e2e.test.ts) does the
+[`../packages/core/src/sync/entries.e2e.test.ts`](../packages/core/src/sync/entries.e2e.test.ts) does the
 same for seed entries — an entry-level reference cycle over an empty store,
 asserting definitions-before-entries ordering, the two-pass upsert payloads,
 and that a second run diffs to zero ops.
-[`../src/sync/push.test.ts`](../src/sync/push.test.ts) covers the rest of the
+[`../packages/core/src/sync/push.test.ts`](../packages/core/src/sync/push.test.ts) covers the rest of the
 scenarios described above against the same kind of fake client — destructive
 ops skipped by default and applied under `allowDestructive: true`, two-pass
 creation of reference cycles (and `blocked` ops from missing dependencies),
 `failed` ops from `userErrors`, and the `counts`/`ok` aggregation. Both use a hand-written fake
 client (keyed on the query/mutation constants exported from
-[`../src/sync/client.ts`](../src/sync/client.ts)) instead of a real store, so
+[`../packages/core/src/sync/client.ts`](../packages/core/src/sync/client.ts)) instead of a real store, so
 they run fully offline. In a real app, that fake is the only thing you'd
 replace — with the client wiring from §2.

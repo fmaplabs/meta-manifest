@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Monorepo split: the CLI is now `@fmaplabs/meta-manifest-cli`.** The repo is a pnpm +
+  Turborepo workspace: `packages/core` publishes the zero-dependency library
+  `@fmaplabs/meta-manifest` (exports `.` and `./node`, no `bin` anymore), and `packages/cli`
+  publishes `@fmaplabs/meta-manifest-cli`, which owns the `mm`/`meta-manifest` bins and the
+  `jiti` dependency and depends on core. Breaking for CLI users: installing
+  `@fmaplabs/meta-manifest` no longer provides `mm` — install
+  `@fmaplabs/meta-manifest-cli` alongside it. Newly public from core (the CLI consumes them
+  across the package boundary): `isAppReservedNamespace`, `metafieldOwnerKey`,
+  `effectiveNamespace`, `effectiveScope`, and the raw GraphQL document constants from
+  `sync/client` (useful for exact-match fake stores in tests). The per-package
+  `release:patch/minor/major` scripts were dropped (two packages would fight over the same
+  `vX.Y.Z` git tag); each package keeps `release` (test + typecheck + publish), run from its
+  own directory after a manual version bump.
+
 - **Strict flag parsing (`--flag=value`, unknown flags).** The CLI now accepts the
   `--flag=value` spelling for value-taking flags (`--scope=merchant`, `--config=custom.ts`)
   in addition to the space-separated form, rejects a value attached to a boolean flag

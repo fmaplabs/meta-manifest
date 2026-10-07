@@ -1,7 +1,10 @@
 # meta-manifest
 
-A zero-dependency, zod-style builder for Shopify **metaobject & metafield definitions**, plus a
-CLI (`mm` / `meta-manifest`) that keeps a store's definitions in sync with schema declared in code.
+A zero-dependency, zod-style builder for Shopify **metaobject & metafield definitions**
+(`@fmaplabs/meta-manifest`), plus a CLI (`mm` / `meta-manifest`, published as
+`@fmaplabs/meta-manifest-cli`) that keeps a store's definitions in sync with schema declared
+in code. This repo is a pnpm + Turborepo workspace: the library lives in
+[`packages/core`](./packages/core) and the CLI in [`packages/cli`](./packages/cli).
 Think [tento](https://github.com/drizzle-team/tento), but scoped to definition
 schema/migrations rather than a runtime query client (see [Roadmap](#roadmap-runtime-query-client)
 below).
@@ -17,7 +20,10 @@ deletes store data.
 Install, scaffold, and point the config at your store:
 
 ```bash
-npm i -D @fmaplabs/meta-manifest   # or: pnpm add -D @fmaplabs/meta-manifest
+# library (schema builders) + CLI
+npm i -D @fmaplabs/meta-manifest @fmaplabs/meta-manifest-cli
+# or: pnpm add -D @fmaplabs/meta-manifest @fmaplabs/meta-manifest-cli
+
 npx mm init                        # writes meta-manifest.config.ts + a starter src/schema.ts
 ```
 

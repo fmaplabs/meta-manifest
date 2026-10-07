@@ -6,8 +6,8 @@ import type {
   MetafieldOp,
   MetafieldPushOpResult,
   PushOpResult,
-} from "../index";
-import { isAppReservedNamespace, metafieldOwnerKey } from "../metafields";
+} from "@fmaplabs/meta-manifest";
+import { isAppReservedNamespace, metafieldOwnerKey } from "@fmaplabs/meta-manifest";
 
 export function opTarget(op: DiffOp): string {
   if (op.kind === "addField") return `${op.type}.${op.field.key}`;

@@ -13,7 +13,7 @@ import type {
   PulledRemote,
   ResolvedEntry,
   ScopeConfig,
-} from "../index";
+} from "@fmaplabs/meta-manifest";
 import {
   diff,
   diffEntries,
@@ -28,10 +28,10 @@ import {
   resolveDefinitions,
   resolveEntries,
   resolveMetafieldSets,
-} from "../index";
-import { APP_NAMESPACE, SyncTransportError } from "../index";
-import { metafieldOwnerKey } from "../metafields";
-import type { AnySchema } from "../index";
+} from "@fmaplabs/meta-manifest";
+import { APP_NAMESPACE, SyncTransportError } from "@fmaplabs/meta-manifest";
+import { metafieldOwnerKey } from "@fmaplabs/meta-manifest";
+import type { AnySchema } from "@fmaplabs/meta-manifest";
 
 const APP_PREFIX = "$app:";
 /** Where the bare `$app` metafield namespace lands under a merchant scope. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { defineMetafields, m, type AdminGraphQLClient, type AnyMetafieldSet } from "../index";
-import { runDiff } from "../cli/diff";
-import { runPush } from "../cli/push";
+import { defineMetafields, m, type AdminGraphQLClient, type AnyMetafieldSet } from "@fmaplabs/meta-manifest";
+import { runDiff } from "./diff";
+import { runPush } from "./push";
 import {
   CREATE_METAFIELD_DEFINITION_MUTATION,
   CURRENT_APP_QUERY,
@@ -9,7 +9,7 @@ import {
   PULL_DEFINITION_QUERY,
   PULL_METAFIELD_DEFINITIONS_QUERY,
   UPDATE_METAFIELD_DEFINITION_MUTATION,
-} from "./client";
+} from "@fmaplabs/meta-manifest";
 
 interface StoredDefinition {
   id: string;

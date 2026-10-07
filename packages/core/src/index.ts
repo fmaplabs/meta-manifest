@@ -5,7 +5,14 @@ export { m, Field } from "./fields/index";
 export type { DecodeResult, FieldValidation, Issue, Money, Measure, Rating, RatingInput, FileType, TypeRef, LinkValue } from "./fields/index";
 
 export { defineMetaobject, isMetaobjectSchema } from "./define";
-export { defineMetafields, isMetafieldSet, APP_NAMESPACE, METAFIELD_OWNER_TYPES } from "./metafields";
+export {
+  defineMetafields,
+  isMetafieldSet,
+  isAppReservedNamespace,
+  metafieldOwnerKey,
+  APP_NAMESPACE,
+  METAFIELD_OWNER_TYPES,
+} from "./metafields";
 export type {
   MetafieldOwner,
   MetafieldOwnerType,
@@ -45,7 +52,13 @@ export type {
   RemoteCapabilities,
   PulledDefinition,
 } from "./sync/normalize";
-export { resolveDefinitions, resolveMetafieldSets, metafieldPairs } from "./sync/resolve";
+export {
+  resolveDefinitions,
+  resolveMetafieldSets,
+  metafieldPairs,
+  effectiveNamespace,
+  effectiveScope,
+} from "./sync/resolve";
 export type {
   ScopeConfig,
   Scope,
@@ -76,5 +89,21 @@ export { pushMetafields } from "./sync/metafield-push";
 export type { MetafieldPushOptions, MetafieldPushResult, MetafieldPushOpResult } from "./sync/metafield-push";
 export { SyncTransportError } from "./sync/client";
 export type { AdminGraphQLClient } from "./sync/client";
+// The raw GraphQL documents the sync engine sends. Exported so consumers (and
+// the CLI package's tests) can build exact-match fake stores for AdminGraphQLClient.
+export {
+  PULL_DEFINITION_QUERY,
+  LIST_DEFINITIONS_QUERY,
+  CREATE_DEFINITION_MUTATION,
+  UPDATE_DEFINITION_MUTATION,
+  PULL_ENTRY_QUERY,
+  UPSERT_ENTRY_MUTATION,
+  CURRENT_APP_QUERY,
+  ACCESS_SCOPES_QUERY,
+  PULL_METAFIELD_DEFINITIONS_QUERY,
+  CREATE_METAFIELD_DEFINITION_MUTATION,
+  UPDATE_METAFIELD_DEFINITION_MUTATION,
+  DELETE_METAFIELD_DEFINITION_MUTATION,
+} from "./sync/client";
 
 export type { StandardSchemaV1 } from "./standard-schema";

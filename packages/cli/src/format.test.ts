@@ -11,7 +11,7 @@ import {
   metafieldOpTarget,
   opTarget,
 } from "./format";
-import type { DiffOp, EntryOp, MetafieldOp } from "../index";
+import type { DiffOp, EntryOp, MetafieldOp } from "@fmaplabs/meta-manifest";
 
 const remove: DiffOp = { kind: "removeField", type: "$app:author", key: "legacy", destructive: true };
 const add: DiffOp = { kind: "addField", type: "$app:author", field: { key: "bio", type: "multi_line_text_field", required: false, filterable: false, validations: [] } };
