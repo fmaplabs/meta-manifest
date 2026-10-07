@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runInit } from "./init";
@@ -25,5 +25,55 @@ describe("runInit", () => {
 
     const second = await runInit({ cwd });
     expect(second.created).toEqual([]); // nothing overwritten
+  });
+
+  it("writes a placeholder .env when SHOPIFY_ADMIN_TOKEN is not set", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+    const result = await runInit({ cwd, env: {} });
+    expect(result.created).toContain(".env");
+    const env = readFileSync(join(cwd, ".env"), "utf8");
+    expect(env).toContain("SHOPIFY_ADMIN_TOKEN=\n");
+    expect(env).toContain("# SHOPIFY_CLIENT_ID=");
+    expect(env).toContain("# SHOPIFY_CLIENT_SECRET=");
+  });
+
+  it("persists an already-exported SHOPIFY_ADMIN_TOKEN into .env", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+    await runInit({ cwd, env: { SHOPIFY_ADMIN_TOKEN: "shpat_test123" } });
+    const env = readFileSync(join(cwd, ".env"), "utf8");
+    expect(env).toContain("SHOPIFY_ADMIN_TOKEN=shpat_test123\n");
+  });
+
+  it("never overwrites an existing .env", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+    writeFileSync(join(cwd, ".env"), "SHOPIFY_ADMIN_TOKEN=keepme\n");
+    const result = await runInit({ cwd, env: { SHOPIFY_ADMIN_TOKEN: "shpat_other" } });
+    expect(result.created).not.toContain(".env");
+    expect(readFileSync(join(cwd, ".env"), "utf8")).toBe("SHOPIFY_ADMIN_TOKEN=keepme\n");
+  });
+
+  it("creates .gitignore covering .env when missing", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+    await runInit({ cwd, env: {} });
+    const lines = readFileSync(join(cwd, ".gitignore"), "utf8").split("\n");
+    expect(lines).toContain(".env");
+  });
+
+  it("appends .env to an existing .gitignore that does not cover it", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+    writeFileSync(join(cwd, ".gitignore"), "node_modules\ndist\n");
+    await runInit({ cwd, env: {} });
+    const contents = readFileSync(join(cwd, ".gitignore"), "utf8");
+    expect(contents.startsWith("node_modules\ndist\n")).toBe(true);
+    expect(contents.split("\n")).toContain(".env");
+  });
+
+  it("leaves .gitignore alone when .env is already covered", async () => {
+    for (const covered of [".env\n", "/.env\n"]) {
+      const cwd = mkdtempSync(join(tmpdir(), "mm-init-"));
+      writeFileSync(join(cwd, ".gitignore"), `node_modules\n${covered}`);
+      await runInit({ cwd, env: {} });
+      expect(readFileSync(join(cwd, ".gitignore"), "utf8")).toBe(`node_modules\n${covered}`);
+    }
   });
 });
