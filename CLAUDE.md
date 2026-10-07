@@ -11,6 +11,8 @@ A pnpm + Turborepo workspace publishing two packages:
 
 The CLI imports core only through the package specifiers `@fmaplabs/meta-manifest` and `@fmaplabs/meta-manifest/node`; core never imports from the CLI. Keep that direction.
 
+Note the directory/repo name mismatch: this checkout lives at `meta-manifest-core/` but is the `fmaplabs/meta-manifest` repo. The sibling `meta-manifest-app/` directory is a separate git repo (a Shopify app with its own deploy pipeline) — not part of this workspace.
+
 ## Commands
 
 ```bash
@@ -32,6 +34,8 @@ pnpm test:watch
 `turbo` makes `test`/`typecheck` depend on `^build`, so core's `dist/` exists first. If you bypass turbo: CLI **typecheck** needs core built (resolves `dist/*.d.ts` via the workspace symlink); CLI **tests** do not (fixtures import `../core/src/index.ts` directly through jiti).
 
 Run the built CLI without publishing: `node packages/cli/dist/index.js <command>`.
+
+pnpm 12 only runs dependency build scripts allowlisted under `allowBuilds` in `pnpm-workspace.yaml` (currently just esbuild) — add new native deps there or their postinstall is silently skipped.
 
 Releases are manual per package: bump the version by hand, then `pnpm release` (test + typecheck + publish) from that package's directory. There are no version-bump scripts — two packages would collide on the same `vX.Y.Z` git tag.
 
