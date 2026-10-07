@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 (core) / 0.10.1 (cli)
 
 - **`auth: "client-credentials"`** — Shopify removed admin-created custom apps, so new
   stores can't mint a permanent `shpat_` token. Set `clientId`/`clientSecret` from a Dev

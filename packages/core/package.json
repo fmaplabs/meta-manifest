@@ -1,6 +1,6 @@
 {
   "name": "@fmaplabs/meta-manifest",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "Zero-dependency, zod-style builder for Shopify metaobject & metafield definitions, with pull → diff → push sync primitives.",
   "publishConfig": {
     "access": "public"
@@ -51,7 +51,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
-    "release": "pnpm test && pnpm typecheck && npm publish --access public"
+    "release": "pnpm test && pnpm typecheck && pnpm publish --access public"
   },
   "devDependencies": {
     "@types/node": "^22.18.8",

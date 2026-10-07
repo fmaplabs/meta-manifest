@@ -1,6 +1,6 @@
 {
   "name": "@fmaplabs/meta-manifest-cli",
-  "version": "0.9.9",
+  "version": "0.10.1",
   "description": "CLI (mm) for @fmaplabs/meta-manifest: syncs Shopify metaobject & metafield definitions to a store via pull → diff → push.",
   "publishConfig": {
     "access": "public"
@@ -40,7 +40,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
-    "release": "pnpm test && pnpm typecheck && npm publish --access public"
+    "release": "pnpm test && pnpm typecheck && pnpm publish --access public"
   },
   "dependencies": {
     "@fmaplabs/meta-manifest": "workspace:^",
