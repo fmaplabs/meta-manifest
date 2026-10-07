@@ -25,15 +25,20 @@ npm i -D @fmaplabs/meta-manifest @fmaplabs/meta-manifest-cli
 # or: pnpm add -D @fmaplabs/meta-manifest @fmaplabs/meta-manifest-cli
 
 npx mm init                        # writes meta-manifest.config.ts + a starter src/schema.ts
+                                   # + a .env scaffold, and makes sure .gitignore covers .env
 ```
 
-Authenticate one of two ways:
+Authenticate one of three ways:
 
-- **Admin API token** (default) — create a custom app in the store admin
-  (**Settings → Apps and sales channels → Develop apps**), grant it
-  `read_metaobject_definitions`/`write_metaobject_definitions`, and expose the token as
-  `SHOPIFY_ADMIN_TOKEN` (exported, or in a `.env` the CLI loads automatically).
-- **Shopify CLI session** — no custom app needed: set `auth: "cli"` in the config and run
+- **Admin API token** (default) — if you have a token (`shpat_…`, e.g. from a legacy
+  admin-created custom app), expose it as `SHOPIFY_ADMIN_TOKEN` (exported, or in a `.env`
+  the CLI loads automatically — `mm init` scaffolds one).
+- **Client credentials** — for new stores (Shopify has removed admin-created custom apps):
+  create an app in the Dev Dashboard, then set `auth: "client-credentials"` with
+  `clientId`/`clientSecret` in the config; the CLI mints a 24h Admin token per run.
+  `$app` material resolves to your own app, so there are no scope caveats — the right
+  mode for CI.
+- **Shopify CLI session** — no app needed: set `auth: "cli"` in the config and run
   `shopify store auth --store my-store.myshopify.com --scopes read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects`
   once. Every call then goes through `shopify store execute` (a few seconds of overhead per
   call; meant for `scope: "merchant"` workflows — see [Config](#config)).
@@ -352,7 +357,8 @@ Two notes:
 
 ## CLI
 
-The CLI drives sync against a real store using an Admin API access token or, with
+The CLI drives sync against a real store using an Admin API access token, a
+client-credentials grant (`auth: "client-credentials"`), or, with
 `auth: "cli"`, a stored Shopify CLI session. For a step-by-step walk-through
 (install → auth → `init` → `pull`/`diff`/`push`, with example output and CI usage),
 see the [CLI quick start & usage guide](./docs/CLI.md).
@@ -368,6 +374,9 @@ export default defineConfig({
   shop: "my-store.myshopify.com",
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   // auth: "cli",                  // optional; authenticate via a `shopify store auth` session instead
+  // auth: "client-credentials",   // optional; mint a 24h token per run from your Dev Dashboard app
+  // clientId: process.env.SHOPIFY_CLIENT_ID!,     // required with auth: "client-credentials"
+  // clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,
   apiVersion: "2026-07",           // optional; defaults to DEFAULT_API_VERSION
   schema: "./src/schema.ts",       // where `pull` writes, `diff`/`push` read
   entries: "./src/entries.ts",     // optional; seed entries to upsert on push
@@ -388,6 +397,12 @@ is configured, it additionally needs `read_metaobjects` for `diff` and `write_me
 rather than an error; for the common owners the CLI detects this and fails with the missing
 scope named instead of planning spurious re-creates.
 
+On a store without a usable permanent token (Shopify has removed admin-created custom apps),
+`auth: "client-credentials"` has the CLI mint a 24-hour Admin token itself on each run from a
+Dev Dashboard app's client ID + secret (`clientId`/`clientSecret`, both required, read from the
+environment like the token). The minted token belongs to your own app, so `$app` material
+resolves correctly — no app-scope caveats. See [`CLI.md` §2](./docs/CLI.md#2-get-an-admin-api-token).
+
 Alternatively, `auth: "cli"` skips the token entirely and runs every call through the Shopify
 CLI's stored `shopify store auth` session. Because that session's "current app" is the Shopify
 CLI itself, `$app`-scoped material changes identity under CLI auth — the CLI refuses `pull` and
@@ -398,9 +413,9 @@ with it. See the walk-through in [`CLI.md` §2](./docs/CLI.md#2-get-an-admin-api
 
 | Command  | Behavior | Exit |
 |----------|----------|------|
-| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema (`src/schema.ts` aggregating `src/metaobjects/author.ts`). No network. | 0 / 1 |
+| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema (`src/schema.ts` aggregating `src/metaobjects/author.ts`) + a `.env` scaffold, ensuring `.gitignore` covers `.env`. No network. | 0 / 1 |
 | `mm pull` | Enumerate the store's app-owned metaobject definitions and **codegen** `schema.ts` (tento-style — writes/overwrites the schema source file). When `metafields` is configured, also re-pulls the declared `(owner, namespace)` pairs into the metafields module. | 0 / 1 |
-| `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared metafields and entries when configured). Read-only. | 0 / 1 |
+| `mm diff` | Load `schema.ts`, compare it against the store, and print the plan (definitions, then declared metafields and entries when configured). Read-only. With `--check`, exits `2` on drift. | 0 / 1 / 2 |
 | `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — `removeField`/`changeFieldType`, and the metafield `removeMetafield`/`changeMetafieldType`, are skipped unless you pass `--allow-destructive`. Metafield definitions push after metaobject definitions; declared entries last. | 0 / 1 / 2 |
 
 ```bash
@@ -411,6 +426,7 @@ npx mm push                    # apply non-destructive changes
 npx mm push --allow-destructive  # also apply field removals/type changes
 npx mm pull --force             # overwrite an existing schema.ts without the warning
 npx mm diff --config ./staging.config.ts  # use a non-default config file
+npx mm diff --check             # CI drift gate: exit 2 when the store is out of sync
 ```
 
 ### Flags
@@ -421,6 +437,8 @@ npx mm diff --config ./staging.config.ts  # use a non-default config file
   warning (dev-store experimentation only — `$app` material resolves to the Shopify CLI's
   own app identity there).
 - `--force` — overwrite the schema file on `pull` without the "overwriting" warning.
+- `--check` — on `diff`, exit `2` when any definition, metafield, or entry change is pending
+  (a CI "store in sync" gate); `0` when clean.
 
 `mm push` exits `2` if any operation failed **or was blocked** (e.g. a reference cycle among the
 definitions being created in that push — so CI can detect a partial failure), `1` on a

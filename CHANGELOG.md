@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **`auth: "client-credentials"`** — Shopify removed admin-created custom apps, so new
+  stores can't mint a permanent `shpat_` token. Set `clientId`/`clientSecret` from a Dev
+  Dashboard app and the CLI exchanges them for a 24h Admin token on each run
+  (`createClientCredentialsAdminClient` in `@fmaplabs/meta-manifest/node`). `$app`
+  material resolves to your own app — no app-scope caveats, unlike `auth: "cli"`.
+
+- **`mm diff --check`** — exits `2` when any definition, metafield, or entry change is
+  pending, `0` when the store is in sync, so CI can gate on drift. Plain `diff` still
+  exits `0` regardless of drift.
+
+- **`mm init` scaffolds `.env` and guards `.gitignore`** — `.env` is pre-filled from an
+  already-exported `SHOPIFY_ADMIN_TOKEN` (or written as a placeholder naming both auth
+  routes), never overwritten; `.gitignore` is created or appended so `.env` can't be
+  committed. The config template now shows the commented `auth: "client-credentials"`
+  block.
+
 - **Per-package READMEs.** `@fmaplabs/meta-manifest` and `@fmaplabs/meta-manifest-cli`
   now ship a README (previously their npm pages were blank): a condensed library guide
   and CLI reference respectively, linking back to the full repo docs. The app's README

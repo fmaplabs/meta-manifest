@@ -65,26 +65,56 @@ no metafield-specific scope. `diff` needs the read scope, `push` the write scope
 > covered — if a first `diff` against a configured store unexpectedly reports
 > only creates for one of those, verify the token's scopes before pushing.
 
-The simplest way to get one is a **custom app** created in the store's admin
-(**Settings → Apps and sales channels → Develop apps**), which issues an Admin
-API access token you grant the scopes above. See Shopify's
-[custom-app / Admin API access token docs](https://help.shopify.com/en/manual/apps/app-types/custom-apps)
-for the current click-path.
-
-Provide the token before running any networked command — the config file reads it
-from the environment so it's safe to commit. Either export it:
+If you already have an Admin API access token (`shpat_…`) — from a legacy
+admin-created custom app, or any app you distribute — use it directly. Provide
+it before running any networked command; the config file reads it from the
+environment so it's safe to commit. Either export it:
 
 ```bash
 export SHOPIFY_ADMIN_TOKEN="shpat_…"
 ```
 
 or put it in a `.env` file in the project root, which the CLI loads automatically
-(a real exported variable wins over the file, and a missing `.env` is ignored):
+(a real exported variable wins over the file, and a missing `.env` is ignored —
+`mm init` scaffolds `.env` and makes sure `.gitignore` covers it):
 
 ```bash
 # .env
 SHOPIFY_ADMIN_TOKEN=shpat_…
 ```
+
+### New stores: client credentials (Dev Dashboard apps)
+
+Shopify has **removed admin-created custom apps** — on new stores there is no
+admin UI that mints a permanent `shpat_` token. The replacement is an app
+created in the [Dev Dashboard](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens)
+whose **client credentials grant** exchanges the app's client ID + secret for a
+24-hour Admin token. Set `auth: "client-credentials"` and the CLI mints that
+token itself on each run — nothing long-lived to provision:
+
+```ts
+export default defineConfig({
+  shop: "my-store.myshopify.com",
+  auth: "client-credentials",
+  clientId: process.env.SHOPIFY_CLIENT_ID!,
+  clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,
+  schema: "./src/schema.ts",
+});
+```
+
+```bash
+# .env (or CI secrets)
+SHOPIFY_CLIENT_ID=…
+SHOPIFY_CLIENT_SECRET=…
+```
+
+Create the app in the Dev Dashboard, grant it the scopes above, and install it
+on the store; the ID and secret are on the app's credentials page. A
+`shop_not_permitted` error means the app isn't installed on that shop (or isn't
+allowed to use the grant there). Because the minted token belongs to **your own
+app**, `$app` metaobject types and metafield namespaces resolve correctly — no
+caveats, unlike `auth: "cli"` below. This is also the right mode for CI: both
+values are plain secrets, and the per-run mint adds a single HTTP call.
 
 ### Alternative: authenticate with the Shopify CLI
 
@@ -140,11 +170,18 @@ npx mm init
 `init` never touches the network and never overwrites existing files. It writes:
 
 ```
-Created: meta-manifest.config.ts, src/metaobjects/author.ts, src/schema.ts
-Next: set SHOPIFY_ADMIN_TOKEN (export it or add it to .env), edit meta-manifest.config.ts, then run `mm diff`.
+Created: meta-manifest.config.ts, src/metaobjects/author.ts, src/schema.ts, .env, .gitignore
+Next: put SHOPIFY_ADMIN_TOKEN (or SHOPIFY_CLIENT_ID/SECRET) in .env, edit meta-manifest.config.ts, then run `mm diff`.
 ```
 
 (If the files already exist you'll get `Nothing to do — config and schema already exist.`)
+
+Besides the three project files below, `init` scaffolds **`.env`** — pre-filled
+with `SHOPIFY_ADMIN_TOKEN` when it's already exported in your environment, a
+placeholder otherwise (never overwritten if one exists) — and makes sure
+**`.gitignore` covers `.env`**: it creates `.gitignore` when missing and appends
+`.env` when no line already matches (`.gitignore` is the one existing file init
+may modify).
 
 Three files land in your project:
 
@@ -396,6 +433,8 @@ reach for:
 - `--allow-destructive` — apply `removeField` / `changeFieldType` / `onlineStore`
   disable on `push`.
 - `--force` — skip the "overwriting" warning on `pull`.
+- `--check` — on `diff`, exit `2` when the store differs from the local schema
+  (the CI drift gate — see §8).
 
 `mm --help` (or `-h`) prints usage and exits.
 
@@ -409,22 +448,22 @@ The exit codes are what a CI gate keys off of:
 | ---- | ---------------------------------------------------------------------------------- |
 | `0`  | Success. **Also returned when destructive ops were skipped** — a skip is not a failure. |
 | `1`  | A config or transport error (bad/missing config, Shopify rejected a request).      |
-| `2`  | **`push` only** — one or more ops (definition **or** entry) `failed` **or** `blocked`, so the store is partially applied. |
+| `2`  | The store ≠ the desired state: on `push`, one or more ops (definition **or** entry) `failed` **or** `blocked`, so the store is partially applied; on `diff --check`, there is drift (any pending definition, metafield, or entry change). |
 
 The important subtleties:
 
 - **Skipped ≠ failure.** A `push` that skips destructive ops (because you didn't
   pass `--allow-destructive`) still exits `0`. Only `failed` and `blocked` ops
   drive the exit-`2` path.
-- **Only `push` can exit `2`.** `pull` and `diff` are `0` on success, `1` on error.
+- **Plain `diff` never exits `2`.** Without `--check`, `diff` is `0` on success
+  even when there is drift, `1` on error — it's a preview, not a gate.
 
-A typical CI pipeline previews on every PR and applies on merge:
+A typical CI pipeline previews on every PR, gates on drift, and applies on merge:
 
 ```bash
-# On a pull request — surface the plan, fail the job only on config/transport errors.
-# Note: diff exits 0 even when there IS drift (there's no --check mode), so don't
-# wire it up as a "fail if out of sync" gate — it only fails on a config/transport error.
-npx mm diff
+# On a pull request — surface the plan; exit 2 (fail the job) when the store
+# is out of sync with the schema in the PR, 1 on config/transport errors.
+npx mm diff --check
 
 # On merge to main — apply non-destructive changes; a non-zero exit fails the job.
 npx mm push
@@ -463,9 +502,9 @@ failed). See [`SYNC.md` §5](./SYNC.md#5-push). |
 
 | Command | What it does | Network | Exits |
 | ------- | ------------ | ------- | ----- |
-| `mm init` | Scaffold `meta-manifest.config.ts` + `src/schema.ts` (never overwrites). | no | 0 / 1 |
+| `mm init` | Scaffold `meta-manifest.config.ts` + `src/schema.ts` + `.env` (never overwrites; may append to `.gitignore`). | no | 0 / 1 |
 | `mm pull` | Generate `schema.ts` from the store's app-owned definitions. | yes | 0 / 1 |
-| `mm diff` | Print the plan `push` would apply. Read-only. | yes | 0 / 1 |
+| `mm diff` | Print the plan `push` would apply. Read-only. `--check` exits 2 on drift. | yes | 0 / 1 / 2 |
 | `mm push` | Apply the plan (ordered, destructive-gated). | yes | 0 / 1 / 2 |
 
 See also: [README CLI reference](../README.md#cli) · [SYNC.md sync model](./SYNC.md).

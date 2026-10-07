@@ -24,13 +24,16 @@ npx mm diff   # preview what push would change
 npx mm push   # apply it
 ```
 
-Authenticate one of two ways:
+Authenticate one of three ways:
 
-- **Admin API token** (default) — create a custom app in the store admin
-  (**Settings → Apps and sales channels → Develop apps**), grant it
-  `read_metaobject_definitions`/`write_metaobject_definitions`, and expose the token
-  as `SHOPIFY_ADMIN_TOKEN` (exported, or in a `.env` the CLI loads automatically).
-- **Shopify CLI session** — no custom app needed: set `auth: "cli"` in the config and
+- **Admin API token** (default) — expose an existing token (`shpat_…`, e.g. from a
+  legacy admin-created custom app) as `SHOPIFY_ADMIN_TOKEN` (exported, or in a `.env`
+  the CLI loads automatically — `mm init` scaffolds one and keeps it git-ignored).
+- **Client credentials** — for new stores (Shopify removed admin-created custom apps):
+  set `auth: "client-credentials"` with `clientId`/`clientSecret` from a Dev Dashboard
+  app, and the CLI mints a 24h Admin token per run. `$app` material resolves to your
+  own app — no scope caveats; the right mode for CI.
+- **Shopify CLI session** — no app needed: set `auth: "cli"` in the config and
   run `shopify store auth --store my-store.myshopify.com --scopes read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects`
   once. Calls then go through `shopify store execute` (a few seconds of overhead per
   call; meant for `scope: "merchant"` workflows — under CLI auth, `$app`-scoped
@@ -48,6 +51,9 @@ export default defineConfig({
   shop: "my-store.myshopify.com",
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   // auth: "cli",                    // optional; use a `shopify store auth` session instead
+  // auth: "client-credentials",     // optional; mint a 24h token per run from your Dev Dashboard app
+  // clientId: process.env.SHOPIFY_CLIENT_ID!,
+  // clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,
   apiVersion: "2026-07",             // optional
   schema: "./src/schema.ts",         // where `pull` writes, `diff`/`push` read
   entries: "./src/entries.ts",       // optional; seed entries to upsert on push
@@ -64,9 +70,9 @@ The config and schema/entries/metafields modules are TypeScript, loaded directly
 
 | Command  | Behavior | Exit |
 |----------|----------|------|
-| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema. No network. | 0 / 1 |
+| `mm init` | Scaffold `meta-manifest.config.ts` + a starter schema + `.env` (ensuring `.gitignore` covers it). No network. | 0 / 1 |
 | `mm pull` | Enumerate the store's definitions and **codegen** the schema module (overwrites it). With `metafields` configured, also re-pulls the declared `(owner, namespace)` pairs. | 0 / 1 |
-| `mm diff` | Compare local schema against the store and print the plan. Read-only; exits 0 even when there is drift. | 0 / 1 |
+| `mm diff` | Compare local schema against the store and print the plan. Read-only; exits 0 even when there is drift, unless `--check` (then 2 on drift). | 0 / 1 / 2 |
 | `mm push` | Diff, then apply: topologically ordered (referenced types created first) and **destructive-gated** — field removals / type changes are skipped unless `--allow-destructive`. Metafield definitions push after metaobject definitions; declared entries last. | 0 / 1 / 2 |
 
 `mm push` exits `2` if any operation failed or was blocked (so CI can detect a partial
@@ -82,6 +88,7 @@ destructive ops were skipped.
 - `--allow-cli-app-scope` — under `auth: "cli"`, downgrade the app-scope hard error to
   a warning (dev-store experimentation only).
 - `--force` — overwrite the schema file on `pull` without the warning.
+- `--check` — on `diff`, exit `2` when any change is pending (CI drift gate).
 
 Value-taking flags accept both `--flag value` and `--flag=value`; unknown flags are an
 error.
