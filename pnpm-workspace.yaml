@@ -1,5 +1,18 @@
 packages:
   - packages/*
+  - apps/*
+  - apps/*/extensions/*
+
+# Hoisting required by Shopify CLI tooling in apps/meta-manifest-app
+shamefullyHoist: true
 
 allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
   esbuild: true
+  prisma: true
+  unrs-resolver: true
+
+overrides:
+  qs: ^6.16.0
