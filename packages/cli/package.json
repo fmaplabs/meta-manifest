@@ -40,7 +40,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
-    "release": "pnpm test && pnpm typecheck && pnpm publish --access public"
+    "release": "pnpm test && pnpm typecheck && pnpm pack --out .release.tgz && npm publish .release.tgz --access public && rm .release.tgz"
   },
   "dependencies": {
     "@fmaplabs/meta-manifest": "workspace:^",
