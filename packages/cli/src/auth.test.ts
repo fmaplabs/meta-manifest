@@ -22,6 +22,26 @@ describe("selectAdminClient", () => {
     expect((init.headers as Record<string, string>)["X-Shopify-Access-Token"]).toBe("tok");
   });
 
+  it("returns the minting client for client-credentials configs", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "minted", expires_in: 86399 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: {} }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = selectAdminClient({
+      shop: "s.myshopify.com",
+      schema: "./s.ts",
+      auth: "client-credentials",
+      clientId: "id",
+      clientSecret: "sec",
+    });
+    await client("query { x }");
+    const [tokenUrl] = (fetchMock.mock.calls[0] as unknown) as [string];
+    expect(tokenUrl).toBe("https://s.myshopify.com/admin/oauth/access_token");
+    const [, gqlInit] = (fetchMock.mock.calls[1] as unknown) as [string, RequestInit];
+    expect((gqlInit.headers as Record<string, string>)["X-Shopify-Access-Token"]).toBe("minted");
+  });
+
   it("returns the shopify-CLI client for cli configs", async () => {
     const calls: string[][] = [];
     const run: RunCommand = async (bin, args) => {

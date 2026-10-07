@@ -16,6 +16,9 @@ describe("runInit", () => {
     expect(config).toContain(`// entries: "./src/entries.ts",`);
     expect(config).toContain(`// metafields: "./src/metafields.ts",`);
     expect(config).toContain(`// auth: "cli",`);
+    expect(config).toContain(`// auth: "client-credentials",`);
+    expect(config).toContain(`// clientId: process.env.SHOPIFY_CLIENT_ID!,`);
+    expect(config).toContain(`// clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,`);
 
     // One metaobject per file (default export), aggregated by the main schema module.
     expect(readFileSync(join(cwd, "src/metaobjects/author.ts"), "utf8")).toContain("export default defineMetaobject");

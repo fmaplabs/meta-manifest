@@ -4,6 +4,7 @@ import { DEFAULT_API_VERSION } from "../config";
 
 export { createCliAdminClient, buildExecuteArgs, extractJsonObject, CLI_SESSION_SCOPES } from "./cli-client";
 export type { RunCommand } from "./cli-client";
+export { createClientCredentialsAdminClient } from "./client-credentials";
 
 /**
  * Build an AdminGraphQLClient that talks directly to a store using an Admin API

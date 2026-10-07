@@ -1,7 +1,7 @@
 import type { Config } from "@fmaplabs/meta-manifest";
 import type { AdminGraphQLClient } from "@fmaplabs/meta-manifest";
 import type { MetaobjectSchema } from "@fmaplabs/meta-manifest";
-import { createAdminClient } from "@fmaplabs/meta-manifest/node";
+import { createAdminClient, createClientCredentialsAdminClient } from "@fmaplabs/meta-manifest/node";
 import { createCliAdminClient, type RunCommand } from "@fmaplabs/meta-manifest/node";
 import { effectiveNamespace, effectiveScope } from "@fmaplabs/meta-manifest";
 import { isAppReservedNamespace, type AnyMetafieldSet } from "@fmaplabs/meta-manifest";
@@ -9,10 +9,18 @@ import { isAppReservedNamespace, type AnyMetafieldSet } from "@fmaplabs/meta-man
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySchema = MetaobjectSchema<any>;
 
-/** Pick the Admin client for the config's auth mode: `"cli"` → `shopify store execute`, otherwise the token-based fetch client. */
+/**
+ * Pick the Admin client for the config's auth mode: `"cli"` → `shopify store execute`,
+ * `"client-credentials"` → per-run token mint, otherwise the token-based fetch client.
+ * Client-credentials tokens belong to the user's own app, so `$app` resolves correctly —
+ * no app-scope guard needed (unlike `auth: "cli"`).
+ */
 export function selectAdminClient(config: Config, deps?: { run?: RunCommand }): AdminGraphQLClient {
   if (config.auth === "cli") {
     return createCliAdminClient({ shop: config.shop, apiVersion: config.apiVersion, run: deps?.run });
+  }
+  if (config.auth === "client-credentials") {
+    return createClientCredentialsAdminClient(config);
   }
   return createAdminClient(config);
 }

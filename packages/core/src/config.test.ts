@@ -50,6 +50,36 @@ describe("config", () => {
     );
   });
 
+  it("validateConfig accepts auth: \"client-credentials\" with clientId + clientSecret and no accessToken", () => {
+    const c = validateConfig({
+      shop: "s.myshopify.com",
+      schema: "./s.ts",
+      auth: "client-credentials",
+      clientId: "id",
+      clientSecret: "secret",
+    });
+    expect(c.auth).toBe("client-credentials");
+  });
+
+  it("validateConfig requires clientId and clientSecret under auth: \"client-credentials\"", () => {
+    const base = { shop: "s", schema: "./s.ts", auth: "client-credentials" };
+    expect(() => validateConfig({ ...base, clientSecret: "x" })).toThrow(/clientId/);
+    expect(() => validateConfig({ ...base, clientId: "x" })).toThrow(/clientSecret/);
+    expect(() => validateConfig({ ...base, clientId: "", clientSecret: "x" })).toThrow(/clientId/);
+  });
+
+  it("validateConfig still requires shop and schema under auth: \"client-credentials\"", () => {
+    const creds = { auth: "client-credentials", clientId: "id", clientSecret: "secret" };
+    expect(() => validateConfig({ ...creds, schema: "./s.ts" })).toThrow(/shop/);
+    expect(() => validateConfig({ ...creds, shop: "s" })).toThrow(/schema/);
+  });
+
+  it("validateConfig's auth error names all three modes", () => {
+    expect(() => validateConfig({ shop: "s", accessToken: "t", schema: "./s.ts", auth: "bogus" })).toThrow(
+      /client-credentials/,
+    );
+  });
+
   it("validateConfig accepts a valid metafields path and rejects a non-string one", () => {
     const base = { shop: "s", accessToken: "t", schema: "./s.ts" };
     expect(validateConfig({ ...base, metafields: "./m.ts" }).metafields).toBe("./m.ts");

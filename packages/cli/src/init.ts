@@ -7,6 +7,9 @@ export default defineConfig({
   shop: "my-store.myshopify.com",
   accessToken: process.env.SHOPIFY_ADMIN_TOKEN!,
   // auth: "cli", // use a \`shopify store auth\` session instead of accessToken — see docs/CLI.md §2
+  // auth: "client-credentials", // mint a 24h token per run from your Dev Dashboard app — see docs/CLI.md §2
+  // clientId: process.env.SHOPIFY_CLIENT_ID!,
+  // clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,
   schema: "./src/schema.ts",
   // entries: "./src/entries.ts",
   // metafields: "./src/metafields.ts",
