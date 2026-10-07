@@ -8,7 +8,7 @@ A pnpm + Turborepo workspace publishing two packages and hosting one app:
 
 - `packages/core` — `@fmaplabs/meta-manifest`: zero-runtime-dependency, zod-style builders for Shopify metaobject & metafield definitions, plus the pull → diff → push sync engine. Exports `.` and `./node`.
 - `packages/cli` — `@fmaplabs/meta-manifest-cli`: the `mm` / `meta-manifest` CLI. Owns the `jiti` dependency and depends on core via `workspace:^`.
-- `apps/meta-manifest-app` — the Shopify app (React Router 7 + Prisma, deployed via its own Dockerfile; not published to npm). Its `extensions/*` are workspace packages claimed by the **root** `pnpm-workspace.yaml` — pnpm does not support nested workspaces, so never re-add a `pnpm-workspace.yaml` inside the app.
+- `apps/meta-manifest-app` — the Shopify app (React Router 7 + Prisma on Cloudflare D1, deployed to Cloudflare Workers via its `deploy:cf` script; not published to npm). Its `extensions/*` are workspace packages claimed by the **root** `pnpm-workspace.yaml` — pnpm does not support nested workspaces, so never re-add a `pnpm-workspace.yaml` inside the app.
 
 The CLI imports core only through the package specifiers `@fmaplabs/meta-manifest` and `@fmaplabs/meta-manifest/node`; core never imports from the CLI. Keep that direction.
 
@@ -41,7 +41,7 @@ pnpm test:watch
 
 Run the built CLI without publishing: `node packages/cli/dist/index.js <command>`.
 
-pnpm 12 only runs dependency build scripts allowlisted under `allowBuilds` in `pnpm-workspace.yaml` (esbuild, prisma/@prisma/*, @parcel/watcher, unrs-resolver) — add new native deps there or their postinstall is silently skipped.
+pnpm 12 only runs dependency build scripts allowlisted under `allowBuilds` in `pnpm-workspace.yaml` (esbuild, prisma/@prisma/*, @parcel/watcher, unrs-resolver, workerd) — add new native deps there or their postinstall is silently skipped.
 
 Releases are manual per package: bump the version by hand, then `pnpm release` (test + typecheck + publish) from that package's directory. There are no version-bump scripts — two packages would collide on the same `vX.Y.Z` git tag.
 

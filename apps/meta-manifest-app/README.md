@@ -3,9 +3,10 @@
 The Shopify app for the meta-manifest project — an embedded admin app built with
 [React Router 7](https://reactrouter.com/) and
 [`@shopify/shopify-app-react-router`](https://shopify.dev/docs/api/shopify-app-react-router),
-with [Prisma](https://www.prisma.io/) (SQLite by default) for session storage. It lives
-in the `fmaplabs/meta-manifest` pnpm + Turborepo workspace but is **not published to
-npm** — it deploys via its own `Dockerfile`.
+with [Prisma](https://www.prisma.io/) on [Cloudflare D1](https://developers.cloudflare.com/d1/)
+for session storage. It lives in the `fmaplabs/meta-manifest` pnpm + Turborepo workspace
+but is **not published to npm** — it deploys to
+[Cloudflare Workers](https://developers.cloudflare.com/workers/) via `pnpm deploy:cf`.
 
 Scaffolded from the
 [Shopify React Router app template](https://github.com/Shopify/shopify-app-template-react-router);
@@ -18,24 +19,32 @@ for common gotchas (embedded-app navigation, webhooks, Prisma engines, JWT clock
 Install from the **workspace root** (`pnpm install`), then from this directory:
 
 ```bash
-pnpm dev          # shopify app dev — tunnels, env vars, hot reload
-pnpm deploy       # shopify app deploy
+pnpm dev          # shopify app dev — tunnels, env vars, hot reload (runs in workerd)
+pnpm deploy       # shopify app deploy — pushes shopify.app.toml config
+pnpm deploy:cf    # react-router build && wrangler deploy — ships the worker
 pnpm build        # react-router build → build/
-pnpm typecheck    # react-router typegen && tsc --noEmit
+pnpm typecheck    # react-router typegen && wrangler types && tsc --noEmit
 pnpm lint
 ```
+
+`shopify app dev` drives the Cloudflare vite plugin: the server code runs in
+workerd (the Workers runtime), vite.config.ts mirrors the CLI-injected env
+(including the per-session tunnel URL) into `.dev.vars`, and `predev` applies
+D1 migrations to the local database in `.wrangler/state/v3`.
 
 Requires the [Shopify CLI](https://shopify.dev/docs/apps/tools/cli) and Node >= 22.12.
 App configuration (scopes — currently `write_products`, `write_metaobjects`,
 `write_metaobject_definitions` — webhooks, and TOML-declared metafield/metaobject
 definitions) lives in `shopify.app.toml`.
 
-Authenticated Admin API access goes through the `shopify` export from
-`app/shopify.server.ts`:
+Authenticated Admin API access goes through the per-request `shopify` instance
+on the load context (built by `createShopifyApp` in `app/shopify.server.ts` and
+attached in `app/load-context.ts` — Workers forbids cross-request I/O, so there
+is no module-scope singleton):
 
 ```ts
-export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin } = await shopify.authenticate.admin(request);
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const { admin } = await context.shopify.authenticate.admin(request);
   const response = await admin.graphql(`{ shop { name } }`);
   // ...
 }
@@ -52,13 +61,35 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 ## Database & deployment
 
-Sessions are stored via Prisma (`prisma/schema.prisma`); the default SQLite database
-works in production for a single-instance deployment — swap the datasource provider
-for anything multi-instance.
+Sessions are stored via Prisma (`prisma/schema.prisma`) against Cloudflare D1
+(`meta-manifest-db`), using `@prisma/adapter-d1`. The schema's sqlite
+datasource URL is only used by `prisma generate` / `prisma migrate diff`;
+at runtime the D1 binding (`DB` in `wrangler.jsonc`) is the database.
+Applied migrations are tracked by **wrangler** (`migrations/*.sql`, ledgered
+in D1's `d1_migrations` table) — `prisma/migrations` is gone, but
+`schema.prisma` remains the source of truth for diffing.
 
-The `Dockerfile` builds and runs the app: the container entrypoint is
-`npm run docker-start`, which runs `setup` (`prisma generate && prisma migrate deploy`)
-and then `start` (`react-router-serve ./build/server/index.js`). Set
-`NODE_ENV=production` plus the Shopify app env vars (`shopify app env show`) in the
-hosting environment. Hosting options are covered in Shopify's
-[deployment docs](https://shopify.dev/docs/apps/launch/deployment).
+Deploying:
+
+```bash
+pnpm deploy:cf                               # react-router build && wrangler deploy
+pnpm setup                                   # wrangler d1 migrations apply meta-manifest-db --remote
+npx wrangler secret put SHOPIFY_API_SECRET   # once; value from `shopify app env show`
+pnpm deploy                                  # pushes shopify.app.toml (URLs, webhooks) to Shopify
+```
+
+Non-secret config (`SHOPIFY_API_KEY`, `SHOPIFY_APP_URL`, `SCOPES`) lives in
+`wrangler.jsonc` `vars`; `SHOPIFY_API_SECRET` is a wrangler secret only.
+Worker logs: Cloudflare dashboard → Workers → meta-manifest-app → Logs
+(observability is enabled in `wrangler.jsonc`).
+
+### Changing the schema
+
+1. Edit `prisma/schema.prisma`.
+2. `npx wrangler d1 migrations create meta-manifest-db <name>` — creates an
+   empty `migrations/000N_<name>.sql`.
+3. Fill it from the schema diff:
+   `npx prisma migrate diff --from-local-d1 --to-schema-datamodel ./prisma/schema.prisma --script >> migrations/000N_<name>.sql`
+4. `npx wrangler d1 migrations apply meta-manifest-db --local` and
+   `npx prisma generate`, then verify with `pnpm dev`.
+5. `npx wrangler d1 migrations apply meta-manifest-db --remote` when deploying.
