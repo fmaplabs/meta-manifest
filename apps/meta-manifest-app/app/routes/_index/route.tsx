@@ -1,23 +1,22 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, Form, useActionData, useLoaderData } from "react-router";
 
-import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
 
 import styles from "./styles.module.css";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
+export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return { showForm: Boolean(login) };
+  return { showForm: Boolean(context.shopify.login) };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
+export const action = async ({ request, context }: ActionFunctionArgs) => {
+  const errors = loginErrorMessage(await context.shopify.login(request));
 
   return { errors };
 };
