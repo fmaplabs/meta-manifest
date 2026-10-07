@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Per-package READMEs.** `@fmaplabs/meta-manifest` and `@fmaplabs/meta-manifest-cli`
+  now ship a README (previously their npm pages were blank): a condensed library guide
+  and CLI reference respectively, linking back to the full repo docs. The app's README
+  was rewritten to describe this app and its monorepo caveats instead of the stock
+  Shopify template text.
+
 - **Monorepo split: the CLI is now `@fmaplabs/meta-manifest-cli`.** The repo is a pnpm +
   Turborepo workspace: `packages/core` publishes the zero-dependency library
   `@fmaplabs/meta-manifest` (exports `.` and `./node`, no `bin` anymore), and `packages/cli`
